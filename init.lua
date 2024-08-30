@@ -194,6 +194,8 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 -- this is a test comment things
 vim.keymap.set('n', '<C-s>', ':w<CR>', { desc = 'Save the file in the current buffer' })
 vim.keymap.set('i', '<C-s>', '<Esc>:w<CR>i', { desc = 'Save the file in the current buffer' })
+vim.keymap.set('n', '<M-S-q>', ':qa!<CR>', { desc = 'Quits out of everything' })
+vim.keymap.set('i', '<M-S-q>', ':qa!<CR>', { desc = 'Quits out of everything' })
 
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
@@ -938,6 +940,88 @@ require('lazy').setup({
   { import = 'custom.plugins' },
 
   {
+    'nvim-lualine/lualine.nvim',
+    config = function()
+      require('lualine').setup {
+        options = {
+          icons_enabled = true,
+          theme = 'auto',
+          component_separators = { left = '', right = '' },
+          section_separators = { left = '', right = '' },
+          disabled_filetypes = {
+            statusline = {},
+            winbar = {},
+          },
+          ignore_focus = {},
+          always_divide_middle = true,
+          globalstatus = false,
+          refresh = {
+            statusline = 1000,
+            tabline = 1000,
+            winbar = 1000,
+          },
+        },
+        sections = {
+          lualine_a = { 'mode' },
+          lualine_b = { 'branch', 'diff', 'diagnostics' },
+          lualine_c = { 'filename' },
+          lualine_x = { 'encoding', 'fileformat', 'filetype' },
+          lualine_y = { 'progress' },
+          lualine_z = { 'location' },
+        },
+        inactive_sections = {
+          lualine_a = {},
+          lualine_b = {},
+          lualine_c = { 'filename' },
+          lualine_x = { 'location' },
+          lualine_y = {},
+          lualine_z = {},
+        },
+        tabline = {},
+        winbar = {},
+        inactive_winbar = {},
+        extensions = {},
+      }
+    end,
+  },
+
+  {
+    'akinsho/toggleterm.nvim',
+    config = function()
+      require('toggleterm').setup {
+        open_mapping = [[<M-i>]],
+        direction = 'float',
+        shell = 'zsh',
+        float_opts = {
+          border = 'curved',
+          width = function()
+            local win = vim.api.nvim_get_current_win()
+            local width = vim.api.nvim_win_get_width(win)
+            return math.floor(width * 0.7)
+          end,
+          height = function()
+            local win = vim.api.nvim_get_current_win()
+            local height = vim.api.nvim_win_get_height(win)
+            return math.floor(height * 0.7)
+          end,
+          row = function()
+            local win = vim.api.nvim_get_current_win()
+            local height = vim.api.nvim_win_get_height(win)
+            return math.floor((height * 0.3) / 2)
+          end,
+          col = function()
+            local win = vim.api.nvim_get_current_win()
+            local win_col = vim.fn.win_screenpos(win)[2]
+            local width = vim.api.nvim_win_get_width(win)
+            return win_col + math.floor((width * 0.3) / 2)
+          end,
+          title_pos = 'center',
+        },
+      }
+    end,
+  },
+
+  {
     'navarasu/onedark.nvim',
     config = function()
       require('onedark').setup {
@@ -945,11 +1029,11 @@ require('lazy').setup({
         style = 'deep', -- Default theme style. Choose between 'dark', 'darker', 'cool', 'deep', 'warm', 'warmer' and 'light'
         transparent = false, -- Show/hide background
         term_colors = true, -- Change terminal color as per the selected theme style
-        ending_tildes = false, -- Show the end-of-buffer tildes. By default they are hidden
+        ending_tildes = true, -- Show the end-of-buffer tildes. By default they are hidden
         cmp_itemkind_reverse = false, -- reverse item kind highlights in cmp menu
 
         -- toggle theme style ---
-        toggle_style_key = nil, -- keybind to toggle theme style. Leave it nil to disable it, or set it to a string, for example "<leader>ts"
+        toggle_style_key = '<leader>tod', -- keybind to toggle theme style. Leave it nil to disable it, or set it to a string, for example "<leader>ts"
         toggle_style_list = { 'dark', 'darker', 'cool', 'deep', 'warm', 'warmer', 'light' }, -- List of styles to toggle between
 
         -- Change code style ---
