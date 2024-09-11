@@ -19,4 +19,5 @@ return {
       suppressed_dirs = { '~/', '~/Projects', '~/Downloads', '/' },
     },
   },
+  { 'akinsho/git-conflict.nvim', version = '*', config = true },
 }
