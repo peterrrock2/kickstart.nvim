@@ -19,5 +19,19 @@ return {
       suppressed_dirs = { '~/', '~/Projects', '~/Downloads', '/' },
     },
   },
-  { 'akinsho/git-conflict.nvim', version = '*', config = true },
+  {
+    'norcalli/nvim-colorizer.lua',
+    config = function()
+      require('colorizer').setup()
+    end,
+  },
+  { 'lukas-reineke/virt-column.nvim', opts = {} },
+  -- {
+  --   dir = '~/Desktop/GlowDeep.nvim',
+  --   config = function()
+  --     require('GlowDeep').setup()
+  --
+  --     vim.keymap.set('n', '<leader>glo', ':lua require("GlowDeep").setup()<CR>', { desc = 'Load Glow Deep' })
+  --   end,
+  -- },
 }

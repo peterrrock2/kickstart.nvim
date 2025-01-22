@@ -4,8 +4,8 @@
 vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
 
--- Set to true if you have a Nerd Font installed and selected in the terminaladsfa
-vim.g.have_nerd_font = false
+-- Set to true if you have a Nerd Font installed and selected in the terminal
+vim.g.have_nerd_font = true
 
 -- [[ Setting options ]]
 -- See `:help vim.opt;
@@ -78,6 +78,15 @@ vim.opt.scrolloff = 0
 -- Needed for the bufferline extenxion to work
 vim.opt.termguicolors = true
 
+-- Make the nubmer of space that a tab character occupies 4
+vim.opt.tabstop = 4
+
+-- Number of spaces to use for each step of an indentation
+vim.opt.shiftwidth = 4
+
+-- Convert tabs to spaces
+vim.opt.expandtab = true
+
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
 
@@ -106,10 +115,17 @@ vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' }
 --  Use CTRL+<hjkl> to switch between windows
 --
 --  See `:help wincmd` for a list of all window commands
-vim.keymap.set('n', '<C-h>', '<C-w><C-h>', { desc = 'Move focus to the left window' })
-vim.keymap.set('n', '<C-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
-vim.keymap.set('n', '<C-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
-vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
+--
+-- NOTE: Movement keybinds
+vim.keymap.set('n', '<M-S-h>', '<C-w><C-h>', { desc = 'Move focus to the left window' })
+vim.keymap.set('n', '<M-S-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
+vim.keymap.set('n', '<M-S-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
+vim.keymap.set('n', '<M-S-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
+
+vim.keymap.set('n', '<C-j>', ':m +1<CR>i', { desc = 'Move line down 1' })
+vim.keymap.set('i', '<C-j>', '<Esc>:m +1<CR>i', { desc = 'Move line down 1' })
+vim.keymap.set('n', '<C-k>', ':m -2<CR>i', { desc = 'Move line up 1' })
+vim.keymap.set('i', '<C-k>', '<Esc>:m -2<CR>i', { desc = 'Move line up 1' })
 
 -- NOTE: Peter keybinds start
 -- this is a test comment things
@@ -117,12 +133,14 @@ vim.keymap.set('n', '<C-s>', ':w<CR>', { desc = 'Save the file in the current bu
 vim.keymap.set('i', '<C-s>', '<Esc>:w<CR>i', { desc = 'Save the file in the current buffer' })
 vim.keymap.set('n', '<M-S-q>', ':qa!<CR>', { desc = 'Quits out of everything' })
 vim.keymap.set('i', '<M-S-q>', ':qa!<CR>', { desc = 'Quits out of everything' })
-vim.keymap.set('n', '<C-;>', ':bprev<CR>', { desc = 'Move to the previous buffer' })
-vim.keymap.set('i', '<C-;>', '<Esc>:bprev<CR>', { desc = 'Move to the previous buffer' })
-vim.keymap.set('n', "<C-'>", ':bnext<CR>', { desc = 'Move to the next buffer' })
-vim.keymap.set('i', "<C-'>", '<Esc>:bnext<CR>', { desc = 'Move to the next buffer' })
-vim.keymap.set('n', '<M-w>', ':bd<CR>', { desc = 'Close current buffer' })
-vim.keymap.set('i', '<M-w>', '<Esc>:bd<CR>', { desc = 'Close current buffer' })
+vim.keymap.set('n', '<M-h>', ':bprev<CR>', { desc = 'Move to the previous buffer' })
+vim.keymap.set('i', '<M-h>', '<Esc>:bprev<CR>', { desc = 'Move to the previous buffer' })
+vim.keymap.set('n', '<M-l>', ':bnext<CR>', { desc = 'Move to the next buffer' })
+vim.keymap.set('i', '<M-l>', '<Esc>:bnext<CR>', { desc = 'Move to the next buffer' })
+vim.keymap.set('n', '<M-S-c>', ':bp | bd #<CR>', { desc = 'Close current buffer' })
+vim.keymap.set('i', '<M-S-c>', '<Esc>:bp | bd #<CR>', { desc = 'Close current buffer' })
+vim.keymap.set('n', '<M-c>', '<C-w>c', { desc = 'Close current panel' })
+vim.keymap.set('i', '<M-c>', '<Esc><C-w>c', { desc = 'Close current panel' })
 
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
@@ -200,9 +218,9 @@ require('lazy').setup({
         topdelete = { text = '‾' },
         changedelete = { text = '~' },
       },
+      current_line_blame = true,
     },
   },
-
   -- NOTE: Plugins can also be configured to run Lua code when they are loaded.
   --
   -- This is often very useful to both group configuration, as well as handle
@@ -436,7 +454,6 @@ require('lazy').setup({
       --
       -- If you're wondering about lsp vs treesitter, you can check out the wonderfully
       -- and elegantly composed help section, `:help lsp-vs-treesitter`
-
       --  This function gets run when an LSP attaches to a particular buffer.
       --    That is to say, every time a new file is opened that is associated with
       --    an lsp (for example, opening `main.rs` is associated with `rust_analyzer`) this
@@ -616,6 +633,16 @@ require('lazy').setup({
               },
               -- You can toggle below to ignore Lua_LS's noisy `missing-fields` warnings
               -- diagnostics = { disable = { 'missing-fields' } },
+            },
+          },
+        },
+        r_language_server = {
+          settings = {
+            r = {
+              lsp = {
+                diagnostics = false,
+                rich_documentation = true,
+              },
             },
           },
         },
@@ -814,7 +841,7 @@ require('lazy').setup({
       -- Load the colorscheme here.
       -- Like many other themes, this one has different styles, and you could load
       -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'onedark'
+      vim.cmd.colorscheme 'tokyonight-storm'
 
       -- You can configure highlights by doing something like:
       vim.cmd.hi 'Comment gui=none'
@@ -1009,7 +1036,15 @@ require('lazy').setup({
       }
     end,
   },
-
+  {
+    'lukas-reineke/virt-column.nvim',
+    config = function()
+      require('virt-column').setup {
+        char = '│',
+        virtcolumn = '100, 120',
+      }
+    end,
+  },
   {
     'navarasu/onedark.nvim',
     config = function()
@@ -1087,6 +1122,8 @@ require('lazy').setup({
     },
   },
 })
+
+vim.cmd.colorscheme 'onedark'
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
