@@ -26,6 +26,8 @@ return {
     end,
   },
   { 'lukas-reineke/virt-column.nvim', opts = {} },
+  { 'zbirenbaum/copilot.lua' },
+  { 'sindrets/diffview.nvim' },
   -- {
   --   dir = '~/Desktop/GlowDeep.nvim',
   --   config = function()

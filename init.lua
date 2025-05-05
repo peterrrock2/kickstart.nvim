@@ -1,4 +1,4 @@
--- Set <space> as the leader key
+-- Set <space> as the leader ke-
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
 vim.g.mapleader = ' '
@@ -31,6 +31,10 @@ vim.opt.showmode = true
 vim.schedule(function()
   vim.o.clipboard = 'unnamedplus'
 end)
+
+vim.opt.clipboard:append { 'unnamed', 'unnamedplus' }
+
+vim.opt.guicursor = 'n-v-c:block,i:ver25-blinkon0'
 
 -- Enable break indent
 vim.o.breakindent = true
@@ -121,18 +125,16 @@ vim.keymap.set('n', '<M-S-h>', '<C-w><C-h>', { desc = 'Move focus to the left wi
 vim.keymap.set('n', '<M-S-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
 vim.keymap.set('n', '<M-S-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
 vim.keymap.set('n', '<M-S-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
-
 vim.keymap.set('n', '<C-j>', ':m +1<CR>i', { desc = 'Move line down 1' })
 vim.keymap.set('i', '<C-j>', '<Esc>:m +1<CR>i', { desc = 'Move line down 1' })
 vim.keymap.set('n', '<C-k>', ':m -2<CR>i', { desc = 'Move line up 1' })
 vim.keymap.set('i', '<C-k>', '<Esc>:m -2<CR>i', { desc = 'Move line up 1' })
 
 -- NOTE: Peter keybinds start
--- this is a test comment things
-vim.keymap.set('n', '<C-s>', ':w<CR>', { desc = 'Save the file in the current buffer' })
-vim.keymap.set('i', '<C-s>', '<Esc>:w<CR>i', { desc = 'Save the file in the current buffer' })
+vim.keymap.set('n', '<C-s>', ':wa<CR>', { desc = 'Save the file in the current buffer' })
+vim.keymap.set('i', '<C-s>', '<Esc>:wa<CR>i', { desc = 'Save the file in the current buffer' })
 vim.keymap.set('n', '<M-S-q>', ':qa!<CR>', { desc = 'Quits out of everything' })
-vim.keymap.set('i', '<M-S-q>', ':qa!<CR>', { desc = 'Quits out of everything' })
+vim.keymap.set('i', '<M-S-q>', '<Esc>:qa!<CR>', { desc = 'Quits out of everything' })
 vim.keymap.set('n', '<M-h>', ':bprev<CR>', { desc = 'Move to the previous buffer' })
 vim.keymap.set('i', '<M-h>', '<Esc>:bprev<CR>', { desc = 'Move to the previous buffer' })
 vim.keymap.set('n', '<M-l>', ':bnext<CR>', { desc = 'Move to the next buffer' })
@@ -141,7 +143,19 @@ vim.keymap.set('n', '<M-S-c>', ':bp | bd #<CR>', { desc = 'Close current buffer'
 vim.keymap.set('i', '<M-S-c>', '<Esc>:bp | bd #<CR>', { desc = 'Close current buffer' })
 vim.keymap.set('n', '<M-c>', '<C-w>c', { desc = 'Close current panel' })
 vim.keymap.set('i', '<M-c>', '<Esc><C-w>c', { desc = 'Close current panel' })
+vim.keymap.set('i', '<C-h>', '<C-w>', { noremap = true, silent = true, desc = 'Delete the previous word' })
+vim.keymap.set('i', '<C-Right>', '<C-o>e<C-o>a', { desc = 'Move to the end of the next word with insert' })
+vim.keymap.set('i', '<C-Left>', '<C-o>b', { desc = 'Move to the beginning of the next word with insert' })
+vim.keymap.set('n', '<leader>gd', function()
+  require('diffview').open()
+end, { silent = true, desc = 'Git Diff View' })
+vim.keymap.set('n', '<leader>gq', function()
+  require('diffview').close()
+end, { silent = true, desc = 'Git Diff View' })
+vim.keymap.set('x', 'gr', '<cmd>diffget<CR>', { desc = 'DiffGet on the selected text', silent = true })
+vim.keymap.set('x', 'gs', '<cmd>diffput<CR>', { desc = 'DiffPut on the selected text', silent = true })
 
+--
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
 
@@ -603,13 +617,26 @@ require('lazy').setup({
       --  Add any additional override configuration in the following tables. Available keys are:
       --  - cmd (table): Override the default command used to start the server
       --  - filetypes (table): Override the default list of associated filetypes for the server
+      --
       --  - capabilities (table): Override fields in capabilities. Can be used to disable certain LSP features.
       --  - settings (table): Override the default settings passed when initializing the server.
       --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
       local servers = {
         -- clangd = {},
         gopls = {},
-        -- pyright = {},
+        pyright = {
+          sesttings = {
+            python = {
+              analysis = {
+                typeCheckingMode = 'basic',
+                diagnosticSeverityOverrides = {
+                  reportIncompatibleVaribleOverride = 'none',
+                  reportGeneralTypeIssues = 'none',
+                },
+              },
+            },
+          },
+        },
         rust_analyzer = {},
         -- html = {},
         -- htmx = {},
@@ -716,6 +743,16 @@ require('lazy').setup({
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
+        python = {
+          function()
+            return {
+              exe = 'black',
+              args = { '--line-length', '80', '-' },
+              stdin = true,
+            }
+          end,
+        },
+        rust = { 'rustfmt' },
         -- Conform can also run multiple formatters sequentially
         -- python = { "isort", "black" },
         --
@@ -774,16 +811,50 @@ require('lazy').setup({
         -- you will need to read `:help ins-completion`
         --
         -- No, but seriously. Please read `:help ins-completion`, it is really good!
-        --
-        -- All presets have the following mappings:
-        -- <tab>/<s-tab>: move to right/left of your snippet expansion
-        -- <c-space>: Open menu or open docs if already open
-        -- <c-n>/<c-p> or <up>/<down>: Select next/previous item
-        -- <c-e>: Hide menu
-        -- <c-k>: Toggle signature help
-        --
-        -- See :h blink-cmp-config-keymap for defining your own keymap
-        preset = 'default',
+        mapping = cmp.mapping.preset.insert {
+          -- Select the [n]ext item
+          ['<C-n>'] = cmp.mapping.select_next_item(),
+          -- Select the [p]revious item
+          ['<C-p>'] = cmp.mapping.select_prev_item(),
+
+          -- Scroll the documentation window [b]ack / [f]orward
+          ['<C-b>'] = cmp.mapping.scroll_docs(-4),
+          ['<C-f>'] = cmp.mapping.scroll_docs(4),
+
+          -- Accept ([y]es) the completion.
+          --  This will auto-import if your LSP supports it.
+          --  This will expand snippets if the LSP sent a snippet.
+          ['<C-y>'] = cmp.mapping.confirm { select = true },
+
+          -- If you prefer more traditional completion keymaps,
+          -- you can uncomment the following lines
+          --['<CR>'] = cmp.mapping.confirm { select = true },
+          --['<Tab>'] = cmp.mapping.select_next_item(),
+          --['<S-Tab>'] = cmp.mapping.select_prev_item(),
+
+          -- Manually trigger a completion from nvim-cmp.
+          --  Generally you don't need this, because nvim-cmp will display
+          --  completions whenever it has completion options available.
+          ['<C-Space>'] = cmp.mapping.complete {},
+
+          -- Think of <c-l> as moving to the right of your snippet expansion.
+          --  So if you have a snippet that's like:
+          --  function $name($args)
+          --    $body
+          --  end
+          --
+          -- <c-l> will move you to the right of each of the expansion locations.
+          -- <c-h> is similar, except moving you backwards.
+          ['<C-l>'] = cmp.mapping(function()
+            if luasnip.expand_or_locally_jumpable() then
+              luasnip.expand_or_jump()
+            end
+          end, { 'i', 's' }),
+          -- ['<C-h>'] = cmp.mapping(function()
+          --   if luasnip.locally_jumpable(-1) then
+          --     luasnip.jump(-1)
+          --   end
+          -- end, { 'i', 's' }),
 
           -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
           --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
@@ -975,8 +1046,6 @@ require('lazy').setup({
           lualine_y = {},
           lualine_z = {},
         },
-        tabline = {},
-        winbar = {},
         inactive_winbar = {},
         extensions = {},
       }
@@ -988,6 +1057,8 @@ require('lazy').setup({
     config = function()
       require('bufferline').setup {
         options = {
+          view = 'tabs',
+          always_show_bufferline = false,
           separator_style = 'slant',
           hover = {
             enabled = true,
@@ -1099,6 +1170,26 @@ require('lazy').setup({
     'akinsho/git-conflict.nvim',
     config = function()
       require('git-conflict').setup {}
+    end,
+  },
+  {
+    'zbirenbaum/copilot.lua',
+    cmd = 'Copilot',
+    event = 'InsertEnter',
+    config = function()
+      require('copilot').setup {
+        suggestion = {
+          auto_trigger = true,
+          keymap = {
+            accept = '<S-C-Tab>',
+            accept_word = '<S-C-Right>',
+            accept_line = '<S-Tab>',
+            next = '<M-]>',
+            prev = '<M-[>',
+            dismiss = '<C-X>',
+          },
+        },
+      }
     end,
   },
 }, {
