@@ -144,6 +144,7 @@ vim.keymap.set('i', '<M-S-c>', '<Esc>:bp | bd #<CR>', { desc = 'Close current bu
 vim.keymap.set('n', '<M-c>', '<C-w>c', { desc = 'Close current panel' })
 vim.keymap.set('i', '<M-c>', '<Esc><C-w>c', { desc = 'Close current panel' })
 vim.keymap.set('i', '<C-h>', '<C-w>', { noremap = true, silent = true, desc = 'Delete the previous word' })
+vim.keymap.set('i', '<C-Del>', '<C-o>dw', { noremap = true, silent = true, desc = 'Delete the previous word' })
 vim.keymap.set('i', '<C-Right>', '<C-o>e<C-o>a', { desc = 'Move to the end of the next word with insert' })
 vim.keymap.set('i', '<C-Left>', '<C-o>b', { desc = 'Move to the beginning of the next word with insert' })
 vim.keymap.set('n', '<leader>gd', function()
@@ -541,7 +542,17 @@ require('lazy').setup({
           --
           -- When you move your cursor, the highlights will be cleared (the second autocommand).
           local client = vim.lsp.get_client_by_id(event.data.client_id)
-          if client and client_supports_method(client, vim.lsp.protocol.Methods.textDocument_documentHighlight, event.buf) then
+          if client.supports_method(vim.lsp.protocol.Methods.textDocument_inlayHint) then
+            vim.lsp.inlay_hint.enable(true, { bufnr = event.buf })
+
+            -- Optional toggle with <C-M> (Ctrl-M is Enter on many terminals though)
+            vim.keymap.set('n', '<M-t>', function()
+              local enabled = vim.lsp.inlay_hint.is_enabled { bufnr = event.buf }
+              vim.lsp.inlay_hint.enable(not enabled, { bufnr = event.buf })
+            end, { buffer = event.buf, desc = '[T]oggle Inlay [H]ints' })
+          end
+
+          if client and client.supports_method(vim.lsp.protocol.Methods.textDocument_documentHighlight) then
             local highlight_augroup = vim.api.nvim_create_augroup('kickstart-lsp-highlight', { clear = false })
             vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
               buffer = event.buf,
@@ -637,7 +648,15 @@ require('lazy').setup({
             },
           },
         },
-        rust_analyzer = {},
+        rust_analyzer = {
+          settings = {
+            ['rust-analyzer'] = {
+              inlayHints = {
+                enable = true,
+              },
+            },
+          },
+        },
         -- html = {},
         -- htmx = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
@@ -743,15 +762,7 @@ require('lazy').setup({
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
-        python = {
-          function()
-            return {
-              exe = 'black',
-              args = { '--line-length', '80', '-' },
-              stdin = true,
-            }
-          end,
-        },
+        python = { 'black' },
         rust = { 'rustfmt' },
         -- Conform can also run multiple formatters sequentially
         -- python = { "isort", "black" },
@@ -1186,7 +1197,7 @@ require('lazy').setup({
             accept_line = '<S-Tab>',
             next = '<M-]>',
             prev = '<M-[>',
-            dismiss = '<C-X>',
+            dismiss = '<C-e>',
           },
         },
       }
