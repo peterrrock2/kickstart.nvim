@@ -1,4 +1,4 @@
--- Set <space> as the leader ke-
+-- Set <space> as the leader key
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
 vim.g.mapleader = ' '
@@ -76,13 +76,12 @@ vim.o.inccommand = 'split'
 -- Show which line your cursor is on
 vim.o.cursorline = true
 
--- Minimal number of screen lines to keep above and below the cursor.
-vim.opt.scrolloff = 0
+-- Minimal number of screen lines to keep above and below the cursor. vim.opt.scrolloff = 0
 
--- Needed for the bufferline extenxion to work
+-- Needed for the bufferline extension to work
 vim.opt.termguicolors = true
 
--- Make the nubmer of space that a tab character occupies 4
+-- Make the number of space that a tab character occupies 4
 vim.opt.tabstop = 4
 
 -- Number of spaces to use for each step of an indentation
@@ -90,6 +89,10 @@ vim.opt.shiftwidth = 4
 
 -- Convert tabs to spaces
 vim.opt.expandtab = true
+
+-- Turn on the spell checking
+vim.opt.spell = true
+vim.opt.spelllang = { 'en_us' }
 
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
@@ -1225,6 +1228,12 @@ require('lazy').setup({
   },
 })
 
+vim.api.nvim_create_autocmd('ColorScheme', {
+  pattern = '*',
+  callback = function()
+    vim.cmd [[highlight SpellBad cterm=underline guisp=Red gui=undercurl]]
+  end,
+})
 vim.cmd.colorscheme 'onedark'
 
 -- The line beneath this is called `modeline`. See `:help modeline`
