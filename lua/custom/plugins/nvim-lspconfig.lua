@@ -206,7 +206,7 @@ return {
       -- clangd = {},
       gopls = {},
       pyright = {
-        sesttings = {
+        settings = {
           python = {
             analysis = {
               typeCheckingMode = 'basic',
