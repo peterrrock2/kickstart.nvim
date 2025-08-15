@@ -32,11 +32,21 @@ return { -- Autoformat
       lua = { 'stylua' },
       python = { 'black' },
       rust = { 'rustfmt' },
+      sh = { 'shfmt' },
+      bash = { 'shfmt' },
+      markdown = { 'mdformat' },
       -- Conform can also run multiple formatters sequentially
       -- python = { "isort", "black" },
       --
       -- You can use 'stop_after_first' to run the first available formatter from the list
       -- javascript = { "prettierd", "prettier", stop_after_first = true },
+    },
+    formatters = {
+      shfmt = {
+        -- indent 4, indent case/esac, simplify, indent binops, keep columns
+        prepend_args = { '-i', '4', '-ci', '-sr', '-bn', '-kp' },
+      },
+      mdformat = { prepend_args = { '--wrap', '100' } },
     },
   },
 }
