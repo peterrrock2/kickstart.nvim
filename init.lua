@@ -42,6 +42,7 @@ vim.o.showmode = true
 --  See `:help 'clipboard'`
 vim.schedule(function()
   vim.o.clipboard = 'unnamedplus'
+  vim.g.clipboard = 'osc52'
 end)
 
 -- Enable break indent
@@ -104,6 +105,13 @@ vim.o.spell = true
 vim.o.spelllang = 'en_us'
 vim.o.confirm = true
 
+-- detect project name (using cwd here, but you could hook into something like project.nvim)
+local project_name = vim.fn.fnamemodify(vim.fn.getcwd(), ':t')
+local project_spellfile = vim.fn.stdpath 'config' .. '/spell/projects/' .. project_name .. '.utf-8.add'
+
+vim.opt.spellfile = { vim.fn.stdpath 'config' .. '/spell/en.utf-8.add' }
+vim.opt.spellfile:prepend(project_spellfile)
+--
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
 
@@ -113,6 +121,48 @@ vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 
 -- Diagnostic keymaps
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
+local function diag_loclist_with_source(bufnr, opts)
+  bufnr = bufnr or 0
+  opts = opts or {}
+  local diags = vim.diagnostic.get(bufnr, opts)
+  local items = {}
+
+  local sev2qf = {
+    [vim.diagnostic.severity.ERROR] = 'E',
+    [vim.diagnostic.severity.WARN] = 'W',
+    [vim.diagnostic.severity.INFO] = 'I',
+    [vim.diagnostic.severity.HINT] = 'H',
+  }
+
+  for _, d in ipairs(diags) do
+    local src = d.source or 'LSP'
+    local code = d.code and ('[' .. tostring(d.code) .. '] ') or ''
+    table.insert(items, {
+      bufnr = d.bufnr or bufnr,
+      lnum = (d.lnum or 0) + 1,
+      col = (d.col or 0) + 1,
+      end_lnum = d.end_lnum and (d.end_lnum + 1) or nil,
+      end_col = d.end_col and (d.end_col + 1) or nil,
+      text = string.format('[%s] %s%s', src, code, d.message or ''),
+      type = sev2qf[d.severity] or 'I',
+    })
+  end
+
+  vim.fn.setloclist(0, {}, ' ', { title = 'Diagnostics', items = items })
+  if #items > 0 then
+    vim.cmd.lopen()
+  else
+    vim.cmd.lclose()
+    if not opts.silent then
+      vim.notify('No diagnostics', vim.log.levels.INFO, { title = 'Diagnostics' })
+    end
+  end
+end
+
+-- replace setloclist binding
+vim.keymap.set('n', '<leader>q', function()
+  diag_loclist_with_source(0) -- current buffer
+end, { desc = 'Diagnostics → Loclist (with source)' })
 
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which

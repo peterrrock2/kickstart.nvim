@@ -203,7 +203,7 @@ return {
     --  - settings (table): Override the default settings passed when initializing the server.
     --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
     local servers = {
-      -- clangd = {},
+      clangd = {},
       gopls = {},
       pyright = {
         settings = {
@@ -211,8 +211,49 @@ return {
             analysis = {
               typeCheckingMode = 'basic',
               diagnosticSeverityOverrides = {
-                reportIncompatibleVaribleOverride = 'none',
+                reportIncompatibleVariableOverride = 'none',
                 reportGeneralTypeIssues = 'none',
+              },
+            },
+          },
+        },
+      },
+      pylsp = {
+        settings = {
+          pylsp = {
+            plugins = {
+              -- Keep pylsp lean; Pyright handles LSP features
+              jedi_completion = { enabled = false },
+              jedi_definition = { enabled = false },
+              jedi_hover = { enabled = false },
+              jedi_references = { enabled = false },
+              pylsp_rope = { enabled = false },
+
+              pycodestyle = { enabled = true, ignore = { 'E501', 'W503', 'E704', 'E203' } },
+              pyflakes = { enabled = false },
+              mccabe = { enabled = false },
+              yapf = { enabled = false },
+              autopep8 = { enabled = false },
+
+              -- MyPy via pylsp-mypy
+              pylsp_mypy = {
+                enabled = true,
+                live_mode = false, -- run on save
+                strict = true, -- set true if you want --strict
+                dmypy = true, -- mypy daemon for speed
+                overrides = {
+                  '--python-executable',
+                  vim.g.python3_host_prog or 'python3',
+                  '--warn-unreachable',
+                  '--warn-redundant-casts',
+                  '--warn-unused-ignores',
+                  '--warn-return-any',
+                  '--disallow-untyped-defs',
+                  '--disallow-incomplete-defs',
+                  '--disallow-untyped-calls',
+                  '--disallow-subclassing-any',
+                  '--strict-equality',
+                },
               },
             },
           },
@@ -283,11 +324,45 @@ return {
     })
     require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
+    local default_publish = vim.lsp.handlers['textDocument/publishDiagnostics']
+
+    local function is_function_def_line(bufnr, lnum)
+      local line = vim.api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1] or ''
+      line = line:match '^%s*(.*)$' or ''
+      return line:find '^def%s' == 1 or line:find '^async%s+def%s' == 1
+    end
+
+    vim.lsp.handlers['textDocument/publishDiagnostics'] = function(err, result, ctx, config)
+      local client = ctx and vim.lsp.get_client_by_id(ctx.client_id)
+      local bufnr = result and result.uri and vim.uri_to_bufnr(result.uri)
+      if client and client.name == 'pyright' and result and result.diagnostics and bufnr then
+        local keep = {}
+        for _, d in ipairs(result.diagnostics) do
+          local is_hint = d.severity == vim.diagnostic.severity.HINT
+          local msg = d.message or ''
+          local is_not_accessed = is_hint and msg:find(' is not accessed', 1, true)
+          local at_func_def = is_not_accessed and is_function_def_line(bufnr, d.range.start.line)
+          -- Drop only HINTs that say "<name> is not accessed" *and* point to a def/async def line
+          if not at_func_def then
+            table.insert(keep, d)
+          end
+        end
+        result.diagnostics = keep
+      end
+      return default_publish(err, result, ctx, config)
+    end
+
+    for server_name, server in pairs(servers) do
+      server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+      require('lspconfig')[server_name].setup(server)
+    end
+
     require('mason-lspconfig').setup {
       ensure_installed = {}, -- explicitly set to an empty table (Kickstart populates installs via mason-tool-installer)
       automatic_installation = false,
       handlers = {
         function(server_name)
+          vim.api.nvim_echo({ { '>>> mason setup for ' .. server_name, 'WarningMsg' } }, true, {})
           local server = servers[server_name] or {}
           -- This handles overriding only values explicitly passed
           -- by the server configuration above. Useful when disabling

@@ -21,7 +21,7 @@ return {
     hints = {
       -- Charaters to use for hints (NOTE: make sure they don't collide with the navigation keymaps)
       ---@type string
-      dictionary = '1234567890asdfghjkl;',
+      dictionary = '1234567890qwertyuiop;',
       -- Character used to disambiguate tags when 'persist_tags' option is set
       prefix_key = '.',
     },

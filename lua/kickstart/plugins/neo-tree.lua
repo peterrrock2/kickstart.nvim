@@ -14,6 +14,25 @@ return {
     { '\\', ':Neotree reveal<CR>', desc = 'NeoTree reveal', silent = true },
   },
   opts = {
+    default_component_configs = {
+      name = { use_git_status_colors = true },
+      git_status = {
+        symbols = {
+          added = 'A',
+          modified = 'M',
+          deleted = 'D',
+          renamed = 'R',
+          untracked = '',
+          ignored = 'I',
+          unstaged = 'U',
+          staged = 'S',
+          conflict = 'X',
+        },
+        -- align = "right", -- uncomment to show badges on the right
+      },
+      modified = { symbol = '●', highlight = 'NeoTreeModified' },
+    },
+
     filesystem = {
       window = {
         mappings = {
