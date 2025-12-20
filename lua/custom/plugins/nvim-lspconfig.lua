@@ -205,15 +205,29 @@ return {
     local servers = {
       clangd = {},
       gopls = {},
-      pyright = {
+      -- pyright = {
+      --   settings = {
+      --     python = {
+      --       analysis = {
+      --         typeCheckingMode = 'basic',
+      --         diagnosticSeverityOverrides = {
+      --           reportIncompatibleVariableOverride = 'none',
+      --           reportGeneralTypeIssues = 'none',
+      --         },
+      --       },
+      --     },
+      --   },
+      -- },
+      ty = {
         settings = {
-          python = {
-            analysis = {
-              typeCheckingMode = 'basic',
-              diagnosticSeverityOverrides = {
-                reportIncompatibleVariableOverride = 'none',
-                reportGeneralTypeIssues = 'none',
-              },
+          ty = {
+            diagnosticMode = 'openFilesOnly', -- or "workspace"
+            inlayHints = {
+              variableTypes = true,
+              callArgumentNames = true,
+            },
+            completions = {
+              autoImport = true,
             },
           },
         },
@@ -229,7 +243,8 @@ return {
               jedi_references = { enabled = false },
               pylsp_rope = { enabled = false },
 
-              pycodestyle = { enabled = true, ignore = { 'E501', 'W503', 'E704', 'E203' } },
+              -- pycodestyle = { enabled = true, ignore = { 'E501', 'W503', 'E704', 'E203' } },
+              pycodestyle = { enabled = false },
               pyflakes = { enabled = false },
               mccabe = { enabled = false },
               yapf = { enabled = false },
@@ -259,6 +274,7 @@ return {
           },
         },
       },
+      ruff = {},
       rust_analyzer = {
         settings = {
           ['rust-analyzer'] = {

@@ -42,7 +42,19 @@ vim.o.showmode = true
 --  See `:help 'clipboard'`
 vim.schedule(function()
   vim.o.clipboard = 'unnamedplus'
-  vim.g.clipboard = 'osc52'
+
+  if vim.env.SSH_TTY or vim.env.SSH_CONNECTION then
+    local osc52 = require 'vim.ui.clipboard.osc52'
+    local function no_paste()
+      return { {}, '' }
+    end
+
+    vim.g.clipboard = {
+      name = 'OSC52 (copy only)',
+      copy = { ['+'] = osc52.copy '+', ['*'] = osc52.copy '*' },
+      paste = { ['+'] = no_paste, ['*'] = no_paste },
+    }
+  end
 end)
 
 -- Enable break indent
@@ -105,13 +117,13 @@ vim.o.spell = true
 vim.o.spelllang = 'en_us'
 vim.o.confirm = true
 
--- detect project name (using cwd here, but you could hook into something like project.nvim)
-local project_name = vim.fn.fnamemodify(vim.fn.getcwd(), ':t')
-local project_spellfile = vim.fn.stdpath 'config' .. '/spell/projects/' .. project_name .. '.utf-8.add'
-
-vim.opt.spellfile = { vim.fn.stdpath 'config' .. '/spell/en.utf-8.add' }
-vim.opt.spellfile:prepend(project_spellfile)
+-- -- detect project name (using cwd here, but you could hook into something like project.nvim)
+-- local project_name = vim.fn.fnamemodify(vim.fn.getcwd(), ':t')
+-- local project_spellfile = vim.fn.stdpath 'config' .. '/spell/projects/' .. project_name .. '.utf-8.add'
 --
+-- vim.opt.spellfile = { vim.fn.stdpath 'config' .. '/spell/en.utf-8.add' }
+-- vim.opt.spellfile:prepend(project_spellfile)
+
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
 
@@ -120,7 +132,7 @@ vim.opt.spellfile:prepend(project_spellfile)
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 
 -- Diagnostic keymaps
-vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
+-- vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 local function diag_loclist_with_source(bufnr, opts)
   bufnr = bufnr or 0
   opts = opts or {}
@@ -198,8 +210,8 @@ vim.keymap.set('n', '<C-s>', ':wa<CR>', { desc = 'Save the file in the current b
 vim.keymap.set('i', '<C-s>', '<Esc>:wa<CR>i', { desc = 'Save the file in the current buffer' })
 vim.keymap.set('n', '<M-S-q>', ':wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
 vim.keymap.set('i', '<M-S-q>', '<Esc>:wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
-vim.keymap.set('n', '<C-S-Left>', ':BufferLineMovePrev<CR>', { desc = 'Moves buffer left' })
-vim.keymap.set('n', '<C-S-Right>', ':BufferLineMoveNext<CR>', { desc = 'Moves buffer right' })
+vim.keymap.set('n', '<C-M-Left>', ':BufferLineMovePrev<CR>', { desc = 'Moves buffer left' })
+vim.keymap.set('n', '<C-M-Right>', ':BufferLineMoveNext<CR>', { desc = 'Moves buffer right' })
 vim.keymap.set('i', '<M-h>', '<Esc>:BufferLineCyclePrev<CR>', { desc = 'Move to the previous buffer' })
 vim.keymap.set('i', '<M-l>', '<Esc>:BufferLineCycleNext<CR>', { desc = 'Move to the next buffer' })
 vim.keymap.set('n', '<M-h>', ':BufferLineCyclePrev<CR>', { desc = 'Move to the previous buffer' })
@@ -309,7 +321,101 @@ vim.api.nvim_create_autocmd('ColorScheme', {
     vim.cmd [[highlight SpellBad cterm=underline guisp=Red gui=undercurl]]
   end,
 })
-vim.cmd.colorscheme 'onedark'
+vim.cmd.colorscheme 'glowdeep'
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
+
+vim.keymap.set('n', '<leader>rr', function()
+  -- Clear cached modules so changes reload
+  for _, mod in ipairs { 'glowdeep', 'glowdeep.palette', 'glowdeep.highlights', 'glowdeep.util' } do
+    package.loaded[mod] = nil
+  end
+  require('glowdeep').load()
+  print 'GlowDeep reloaded'
+end)
+
+-- -- === Black & White baseline highlights ===
+-- local hi = vim.api.nvim_set_hl
+--
+-- local function apply_bw()
+--   -- Core groups
+--   hi(0, 'Normal', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Comment', { fg = '#aaaaaa', bg = '#000000', italic = false })
+--   hi(0, 'Constant', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Identifier', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Statement', { fg = '#ffffff', bg = '#000000', bold = false })
+--   hi(0, 'PreProc', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Type', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Special', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'String', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Number', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Function', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Keyword', { fg = '#ffffff', bg = '#000000' })
+--   hi(0, 'Operator', { fg = '#ffffff', bg = '#000000' })
+--
+--   -- UI
+--   hi(0, 'CursorLine', { bg = '#111111' })
+--   hi(0, 'LineNr', { fg = '#666666', bg = '#000000' })
+--   hi(0, 'CursorLineNr', { fg = '#ffffff', bg = '#000000', bold = true })
+--   hi(0, 'Visual', { bg = '#333333' })
+--   hi(0, 'Pmenu', { fg = '#ffffff', bg = '#111111' })
+--   hi(0, 'PmenuSel', { fg = '#000000', bg = '#ffffff' })
+--   hi(0, 'WinSeparator', { fg = '#222222', bg = '#000000' })
+--   hi(0, 'StatusLine', { fg = '#ffffff', bg = '#111111' })
+--   hi(0, 'StatusLineNC', { fg = '#aaaaaa', bg = '#111111' })
+--   hi(0, 'NonText', { fg = '#333333' })
+--   hi(0, 'Whitespace', { fg = '#333333' })
+--   hi(0, 'Directory', { fg = '#ffffff' })
+--   hi(0, 'Title', { fg = '#ffffff', bold = true })
+--
+--   -- Treesitter → plain groups
+--   hi(0, '@variable', { link = 'Identifier' })
+--   hi(0, '@variable.parameter', { link = 'Identifier' })
+--   hi(0, '@variable.member', { link = 'Identifier' })
+--   hi(0, '@field', { link = 'Identifier' })
+--   hi(0, '@property', { link = 'Identifier' })
+--   hi(0, '@function', { link = 'Function' })
+--   hi(0, '@function.call', { link = 'Function' })
+--   hi(0, '@keyword', { link = 'Statement' })
+--   hi(0, '@string', { link = 'String' })
+--   hi(0, '@number', { link = 'Number' })
+--   hi(0, '@boolean', { link = 'Number' })
+--   hi(0, '@type', { link = 'Type' })
+--   hi(0, '@namespace', { link = 'Identifier' })
+--   hi(0, '@module', { link = 'Identifier' })
+--   hi(0, '@operator', { link = 'Operator' })
+--   hi(0, '@punctuation', { link = 'Special' })
+--
+--   -- LSP semantic tokens → same plain groups
+--   hi(0, '@lsp.type.variable', { link = 'Identifier' })
+--   hi(0, '@lsp.type.parameter', { link = 'Identifier' })
+--   hi(0, '@lsp.type.property', { link = 'Identifier' })
+--   hi(0, '@lsp.type.member', { link = 'Identifier' })
+--   hi(0, '@lsp.type.function', { link = 'Function' })
+--   hi(0, '@lsp.type.method', { link = 'Function' })
+--   hi(0, '@lsp.type.namespace', { link = 'Identifier' })
+--   hi(0, '@lsp.type.type', { link = 'Type' })
+--   hi(0, '@lsp.type.enum', { link = 'Type' })
+--   hi(0, '@lsp.type.keyword', { link = 'Statement' })
+--
+--   -- Diagnostics
+--   hi(0, 'DiagnosticError', { fg = '#ffffff' })
+--   hi(0, 'DiagnosticWarn', { fg = '#dddddd' })
+--   hi(0, 'DiagnosticInfo', { fg = '#cccccc' })
+--   hi(0, 'DiagnosticHint', { fg = '#bbbbbb' })
+-- end
+--
+-- -- Apply once UI is up
+-- vim.api.nvim_create_autocmd('UIEnter', {
+--   group = vim.api.nvim_create_augroup('BWBaselineOnce', { clear = true }),
+--   callback = function()
+--     vim.schedule(apply_bw)
+--   end,
+-- })
+
+-- -- Re-apply on any colorscheme change
+-- vim.api.nvim_create_autocmd('ColorScheme', {
+--   group = vim.api.nvim_create_augroup('BWBaseline', { clear = true }),
+--   callback = apply_bw,
+-- })

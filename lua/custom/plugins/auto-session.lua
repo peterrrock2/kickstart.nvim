@@ -6,10 +6,13 @@ return {
   },
   opts = {
     log_level = 'error',
-    auto_session_enabled = true,
-    auto_save_enabled = true,
-    auto_restore_enabled = true,
-    auto_session_use_git_branch = false,
+    enabled = true,
+    auto_save = true,
+    auto_restore = true,
+    auto_restore_last_session = false,
+    cwd_change_handline = true,
+    use_git_branch_name = true,
+
     suppressed_dirs = { '~/', '~/Projects', '~/Downloads', '/' },
   },
 }

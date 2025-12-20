@@ -16,7 +16,7 @@ return {
         mode = 'buffers', -- replaces the old "view" option
         always_show_bufferline = false,
         separator_style = 'slant',
-        persist_buffer_sort = true, -- keeps manual moves during the session
+        persist_buffer_sort = false, -- keeps manual moves during the session
         -- Custom sort: use the ORDER_IDX we fill when loading
         sort_by = function(a, b)
           local na = vim.loop.fs_realpath(vim.api.nvim_buf_get_name(a.id)) or vim.api.nvim_buf_get_name(a.id)
@@ -47,15 +47,11 @@ return {
     vim.fn.mkdir(bufferline_order_dir, 'p')
 
     local function get_order_file_path()
-      local ok, autosession = pcall(require, 'auto-session.lib')
-      if not ok then
-        return nil
+      local session_path = vim.v.this_session
+      if not session_path or session_path == '' then
+        return nil -- no session loaded -> stay blank
       end
-      local session_name = autosession.current_session_name()
-      if not session_name then
-        return nil
-      end
-      local filename = vim.fs and vim.fs.basename(session_name) or vim.fn.fnamemodify(session_name, ':t')
+      local filename = vim.fs and vim.fs.basename(session_path) or vim.fn.fnamemodify(session_path, ':t')
       return bufferline_order_dir .. filename .. '.txt'
     end
 
@@ -136,30 +132,38 @@ return {
     _G.save_bufferline_order = save_bufferline_order
     _G.load_bufferline_order = load_bufferline_order
 
-    -- Save on exit as before
-    vim.api.nvim_create_autocmd('VimLeavePre', { callback = save_bufferline_order })
+    local loaded_for = nil
+    local function load_if_possible()
+      local path = get_order_file_path()
+      if not path or vim.fn.filereadable(path) == 0 then
+        return
+      end
+      if loaded_for == path then
+        return
+      end
+      loaded_for = path
+      load_bufferline_order()
+    end
 
-    -- IMPORTANT: load AFTER auto-session restores the session
+    -- After session restore (normal case)
     vim.api.nvim_create_autocmd('User', {
       pattern = 'AutoSessionRestorePost',
       callback = function()
-        vim.schedule(load_bufferline_order)
+        vim.schedule(load_if_possible)
       end,
     })
 
-    vim.api.nvim_create_autocmd('VimEnter', {
-      once = true,
+    -- If Bufferline loads AFTER the restore event already fired:
+    vim.schedule(load_if_possible)
+
+    -- Also handle manual :source Session.vim
+    vim.api.nvim_create_autocmd('SessionLoadPost', {
       callback = function()
-        -- If ORDER_IDX is still empty here, try loading now.
-        local empty = true
-        for _ in pairs(ORDER_IDX) do
-          empty = false
-          break
-        end
-        if empty then
-          vim.schedule(load_bufferline_order)
-        end
+        vim.schedule(load_if_possible)
       end,
     })
+
+    -- Save on exit as before
+    vim.api.nvim_create_autocmd('VimLeavePre', { callback = save_bufferline_order })
   end,
 }
