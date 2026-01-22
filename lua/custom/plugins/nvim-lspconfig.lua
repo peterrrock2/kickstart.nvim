@@ -205,19 +205,6 @@ return {
     local servers = {
       clangd = {},
       gopls = {},
-      -- pyright = {
-      --   settings = {
-      --     python = {
-      --       analysis = {
-      --         typeCheckingMode = 'basic',
-      --         diagnosticSeverityOverrides = {
-      --           reportIncompatibleVariableOverride = 'none',
-      --           reportGeneralTypeIssues = 'none',
-      --         },
-      --       },
-      --     },
-      --   },
-      -- },
       ty = {
         settings = {
           ty = {
@@ -242,34 +229,11 @@ return {
               jedi_hover = { enabled = false },
               jedi_references = { enabled = false },
               pylsp_rope = { enabled = false },
-
-              -- pycodestyle = { enabled = true, ignore = { 'E501', 'W503', 'E704', 'E203' } },
               pycodestyle = { enabled = false },
               pyflakes = { enabled = false },
               mccabe = { enabled = false },
               yapf = { enabled = false },
               autopep8 = { enabled = false },
-
-              -- MyPy via pylsp-mypy
-              pylsp_mypy = {
-                enabled = true,
-                live_mode = false, -- run on save
-                strict = true, -- set true if you want --strict
-                dmypy = true, -- mypy daemon for speed
-                overrides = {
-                  '--python-executable',
-                  vim.g.python3_host_prog or 'python3',
-                  '--warn-unreachable',
-                  '--warn-redundant-casts',
-                  '--warn-unused-ignores',
-                  '--warn-return-any',
-                  '--disallow-untyped-defs',
-                  '--disallow-incomplete-defs',
-                  '--disallow-untyped-calls',
-                  '--disallow-subclassing-any',
-                  '--strict-equality',
-                },
-              },
             },
           },
         },
@@ -339,54 +303,23 @@ return {
       'stylua', -- Used to format Lua code
     })
     require('mason-tool-installer').setup { ensure_installed = ensure_installed }
-
-    local default_publish = vim.lsp.handlers['textDocument/publishDiagnostics']
-
-    local function is_function_def_line(bufnr, lnum)
-      local line = vim.api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1] or ''
-      line = line:match '^%s*(.*)$' or ''
-      return line:find '^def%s' == 1 or line:find '^async%s+def%s' == 1
+    for name, cfg in pairs(servers) do
+      cfg.capabilities = vim.tbl_deep_extend('force', {}, capabilities, cfg.capabilities or {})
+      vim.lsp.config(name, cfg)
     end
 
-    vim.lsp.handlers['textDocument/publishDiagnostics'] = function(err, result, ctx, config)
-      local client = ctx and vim.lsp.get_client_by_id(ctx.client_id)
-      local bufnr = result and result.uri and vim.uri_to_bufnr(result.uri)
-      if client and client.name == 'pyright' and result and result.diagnostics and bufnr then
-        local keep = {}
-        for _, d in ipairs(result.diagnostics) do
-          local is_hint = d.severity == vim.diagnostic.severity.HINT
-          local msg = d.message or ''
-          local is_not_accessed = is_hint and msg:find(' is not accessed', 1, true)
-          local at_func_def = is_not_accessed and is_function_def_line(bufnr, d.range.start.line)
-          -- Drop only HINTs that say "<name> is not accessed" *and* point to a def/async def line
-          if not at_func_def then
-            table.insert(keep, d)
-          end
-        end
-        result.diagnostics = keep
-      end
-      return default_publish(err, result, ctx, config)
-    end
-
-    for server_name, server in pairs(servers) do
-      server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
-      require('lspconfig')[server_name].setup(server)
-    end
-
+    -- 2) Let mason-lspconfig manage installs.
+    -- v2: no handlers here anymore.
     require('mason-lspconfig').setup {
-      ensure_installed = {}, -- explicitly set to an empty table (Kickstart populates installs via mason-tool-installer)
-      automatic_installation = false,
-      handlers = {
-        function(server_name)
-          vim.api.nvim_echo({ { '>>> mason setup for ' .. server_name, 'WarningMsg' } }, true, {})
-          local server = servers[server_name] or {}
-          -- This handles overriding only values explicitly passed
-          -- by the server configuration above. Useful when disabling
-          -- certain features of an LSP (for example, turning off formatting for ts_ls)
-          server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
-          require('lspconfig')[server_name].setup(server)
-        end,
-      },
+      ensure_installed = vim.tbl_keys(servers),
+      automatic_enable = false, -- I recommend false while you’re debugging
     }
+
+    -- 3) Enable explicitly (so you control order + can debug)
+    for name, _ in pairs(servers) do
+      vim.lsp.enable(name)
+    end
+
+    vim.notify('LSP config loaded + servers enabled', vim.log.levels.WARN)
   end,
 }

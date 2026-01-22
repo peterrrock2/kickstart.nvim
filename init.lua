@@ -335,6 +335,14 @@ vim.keymap.set('n', '<leader>rr', function()
   print 'GlowDeep reloaded'
 end)
 
+vim.filetype.add {
+  extension = {
+    pyx = 'python',
+    pxd = 'python',
+    pxi = 'python',
+  },
+}
+
 -- -- === Black & White baseline highlights ===
 -- local hi = vim.api.nvim_set_hl
 --
