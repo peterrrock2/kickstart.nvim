@@ -258,7 +258,57 @@ return {
       -- But for many setups, the LSP (`ts_ls`) will work just fine
       -- ts_ls = {},
       --
-
+      ts_ls = {
+        -- Ensure JSX/TSX filetypes are included
+        filetypes = {
+          'javascript',
+          'javascriptreact', -- .jsx
+          'typescript',
+          'typescriptreact', -- .tsx
+        },
+        settings = {
+          typescript = {
+            inlayHints = {
+              includeInlayParameterNameHints = 'all',
+              includeInlayParameterNameHintsWhenArgumentMatchesName = false,
+              includeInlayFunctionParameterTypeHints = true,
+              includeInlayVariableTypeHints = true,
+              includeInlayPropertyDeclarationTypeHints = true,
+              includeInlayFunctionLikeReturnTypeHints = true,
+              includeInlayEnumMemberValueHints = true,
+            },
+          },
+          javascript = {
+            inlayHints = {
+              includeInlayParameterNameHints = 'all',
+              includeInlayParameterNameHintsWhenArgumentMatchesName = false,
+              includeInlayFunctionParameterTypeHints = true,
+              includeInlayVariableTypeHints = true,
+              includeInlayPropertyDeclarationTypeHints = true,
+              includeInlayFunctionLikeReturnTypeHints = true,
+              includeInlayEnumMemberValueHints = true,
+            },
+          },
+        },
+      },
+      eslint = {
+        filetypes = {
+          'javascript',
+          'javascriptreact', -- .jsx
+          'typescript',
+          'typescriptreact', -- .tsx
+        },
+        settings = {
+          workingDirectory = { mode = 'auto' },
+        },
+        -- Optional: ESLint fix on save (comment out if you only want warnings)
+        on_attach = function(_, bufnr)
+          vim.api.nvim_create_autocmd('BufWritePre', {
+            buffer = bufnr,
+            command = 'EslintFixAll',
+          })
+        end,
+      },
       lua_ls = {
         -- cmd = { ... },
         -- filetypes = { ... },
