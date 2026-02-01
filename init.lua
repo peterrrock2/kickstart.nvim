@@ -40,22 +40,85 @@ vim.o.showmode = true
 --  Schedule the setting after `UiEnter` because it can increase startup-time.
 --  Remove this option if you want your OS clipboard to remain independent.
 --  See `:help 'clipboard'`
+
+-- =========================
+-- Clipboard (local + SSH)
+-- =========================
+-- Goal:
+--   - Local (not SSH): yanks go to system clipboard via 'unnamedplus'
+--   - SSH: keep normal y/p working (internal registers),
+--          but ALSO mirror yanks to local clipboard via OSC52.
 vim.schedule(function()
-  vim.o.clipboard = 'unnamedplus'
+  local in_ssh = vim.env.SSH_TTY or vim.env.SSH_CONNECTION
 
-  if vim.env.SSH_TTY or vim.env.SSH_CONNECTION then
-    local osc52 = require 'vim.ui.clipboard.osc52'
-    local function no_paste()
-      return { {}, '' }
+  if in_ssh then
+    -- Do NOT redirect unnamed register to +, otherwise `p` breaks if paste isn't available.
+    vim.opt.clipboard = ''
+
+    -- Configure OSC52 provider (copy works; paste not supported)
+    local ok, osc52 = pcall(require, 'vim.ui.clipboard.osc52')
+    if ok then
+      local function no_paste()
+        return { {}, '' }
+      end
+
+      vim.g.clipboard = {
+        name = 'OSC52 (copy only)',
+        copy = {
+          ['+'] = osc52.copy '+',
+          ['*'] = osc52.copy '*',
+        },
+        paste = {
+          ['+'] = no_paste,
+          ['*'] = no_paste,
+        },
+      }
     end
-
-    vim.g.clipboard = {
-      name = 'OSC52 (copy only)',
-      copy = { ['+'] = osc52.copy '+', ['*'] = osc52.copy '*' },
-      paste = { ['+'] = no_paste, ['*'] = no_paste },
-    }
+  else
+    -- Local session: normal system clipboard integration
+    vim.opt.clipboard = 'unnamedplus'
   end
 end)
+
+-- Optional convenience: explicitly yank to clipboard
+vim.keymap.set({ 'n', 'v' }, '<leader>y', '"+y', { desc = 'Yank to system clipboard' })
+vim.keymap.set('n', '<leader>Y', '"+Y', { desc = 'Yank line to system clipboard' })
+
+-- ==========================================
+-- Yank behavior: highlight + mirror to OSC52
+-- ==========================================
+vim.api.nvim_create_autocmd('TextYankPost', {
+  desc = 'Highlight on yank + mirror yanks to OSC52 clipboard over SSH (without breaking p)',
+  group = vim.api.nvim_create_augroup('yank-clipboard', { clear = true }),
+  callback = function()
+    -- highlight (same as your old autocmd)
+    vim.hl.on_yank()
+
+    -- only do clipboard mirroring for real yanks
+    local ev = vim.v.event
+    if ev.operator ~= 'y' then
+      return
+    end
+
+    -- only over SSH
+    local in_ssh = vim.env.SSH_TTY or vim.env.SSH_CONNECTION
+    if not in_ssh then
+      return
+    end
+
+    -- if user explicitly used a register (like "+y), don't double-copy
+    if ev.regname ~= '' then
+      return
+    end
+
+    -- mirror unnamed yanks to system clipboard using OSC52
+    local ok, osc52 = pcall(require, 'vim.ui.clipboard.osc52')
+    if not ok then
+      return
+    end
+    osc52.copy '+'(ev.regcontents, ev.regtype)
+  end,
+})
 
 -- Enable break indent
 vim.o.breakindent = true
