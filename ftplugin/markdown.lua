@@ -1,0 +1,1 @@
+-- Emoji expansion now runs globally from after/plugin/emoji_expand.lua.

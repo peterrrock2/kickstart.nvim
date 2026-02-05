@@ -100,7 +100,6 @@ return {
       for _, f in ipairs(files) do
         if vim.fn.filereadable(f) == 1 then
           local bufnr = vim.fn.bufadd(f) -- create a buffer handle if missing
-          vim.fn.bufload(bufnr) -- actually load it (names/options valid now)
           vim.bo[bufnr].buflisted = true -- Bufferline only shows listed buffers
           items[#items + 1] = { bufnr = bufnr, path = vim.loop.fs_realpath(f) or f }
         end

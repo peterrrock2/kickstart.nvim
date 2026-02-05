@@ -11,7 +11,6 @@ return {
       require('colorizer').setup()
     end,
   },
-  { 'sindrets/diffview.nvim' },
   require 'custom.plugins.auto-session',
   require 'custom.plugins.bufferline',
   require 'custom.plugins.copilot',

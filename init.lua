@@ -120,6 +120,10 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
+-- Enable external env overrides for Neovim options
+vim.opt.exrc = true
+vim.opt.secure = true
+
 -- Enable break indent
 vim.o.breakindent = true
 
@@ -288,14 +292,9 @@ vim.keymap.set('i', '<C-BS>', '<C-w>', { noremap = true, silent = true, desc = '
 vim.keymap.set('i', '<C-Del>', '<C-o>dw', { noremap = true, silent = true, desc = 'Delete the next word' })
 vim.keymap.set('i', '<C-Right>', '<C-o>e<C-o>a', { desc = 'Move to the end of the next word with insert' })
 vim.keymap.set('i', '<C-Left>', '<C-o>b', { desc = 'Move to the beginning of the next word with insert' })
-vim.keymap.set('n', '<leader>gd', function()
-  require('diffview').open()
-end, { silent = true, desc = 'Git Diff View' })
-vim.keymap.set('n', '<leader>gq', function()
-  require('diffview').close()
-end, { silent = true, desc = 'Git Diff View' })
 vim.keymap.set('x', 'gr', '<cmd>diffget<CR>', { desc = 'DiffGet on the selected text', silent = true })
 vim.keymap.set('x', 'gs', '<cmd>diffput<CR>', { desc = 'DiffPut on the selected text', silent = true })
+vim.keymap.set('n', '<leader>mp', '<cmd>PeekToggle<CR>', { desc = 'Markdown Preview (peek)' })
 
 --
 -- [[ Basic Autocommands ]]
