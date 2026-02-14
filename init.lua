@@ -41,15 +41,16 @@ vim.o.showmode = true
 --  Remove this option if you want your OS clipboard to remain independent.
 --  See `:help 'clipboard'`
 
--- =========================
--- Clipboard (local + SSH)
--- =========================
+-- ===============================
+-- Clipboard (local + SSH + tmux)
+-- ===============================
 -- Goal:
 --   - Local (not SSH): yanks go to system clipboard via 'unnamedplus'
 --   - SSH: keep normal y/p working (internal registers),
 --          but ALSO mirror yanks to local clipboard via OSC52.
 vim.schedule(function()
   local in_ssh = vim.env.SSH_TTY or vim.env.SSH_CONNECTION
+  local in_tmux = vim.env.TMUX ~= nil
 
   if in_ssh then
     -- Do NOT redirect unnamed register to +, otherwise `p` breaks if paste isn't available.
@@ -100,9 +101,10 @@ vim.api.nvim_create_autocmd('TextYankPost', {
       return
     end
 
-    -- only over SSH
+    -- only over SSH or inside tmux (OSC52 helps when tmux blocks clipboard)
     local in_ssh = vim.env.SSH_TTY or vim.env.SSH_CONNECTION
-    if not in_ssh then
+    local in_tmux = vim.env.TMUX ~= nil
+    if not in_ssh and not in_tmux then
       return
     end
 
