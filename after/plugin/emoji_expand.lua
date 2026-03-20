@@ -179,16 +179,20 @@ vim.api.nvim_create_autocmd({ 'BufEnter', 'FileType' }, {
   desc = 'Set emoji expansion insert maps',
   group = vim.api.nvim_create_augroup('emoji-expand-maps', { clear = true }),
   callback = function(args)
-    set_insert_maps(args.buf)
+    if vim.bo[args.buf].filetype == 'markdown' then
+      set_insert_maps(args.buf)
+    end
   end,
 })
 
--- Expand all :shortcode: on save for every buffer
+-- Expand all :shortcode: on save for markdown buffers only
 vim.api.nvim_create_autocmd('BufWritePre', {
   desc = 'Expand :shortcode: to emoji on save',
   group = vim.api.nvim_create_augroup('emoji-expand', { clear = true }),
   callback = function(args)
-    expand_buffer(args.buf)
+    if vim.bo[args.buf].filetype == 'markdown' then
+      expand_buffer(args.buf)
+    end
   end,
 })
 
