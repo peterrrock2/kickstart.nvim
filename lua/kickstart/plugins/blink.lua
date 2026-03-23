@@ -75,9 +75,10 @@ return { -- Autocompletion
     },
 
     sources = {
-      default = { 'lsp', 'path', 'snippets', 'lazydev' },
+      default = { 'lsp', 'path', 'snippets', 'lazydev', 'emoji' },
       providers = {
         lazydev = { module = 'lazydev.integrations.blink', score_offset = 100 },
+        emoji = { module = 'custom.blink_emoji', name = 'Emoji' },
       },
     },
 
