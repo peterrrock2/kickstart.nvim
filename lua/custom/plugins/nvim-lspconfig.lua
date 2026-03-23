@@ -146,21 +146,6 @@ return {
                     })
                 end
 
-                -- Format on save via LSP (only if this client supports it)
-                if client and client.server_capabilities.documentFormattingProvider then
-                    local fmt_group = vim.api.nvim_create_augroup('kickstart-lsp-format', { clear = false })
-                    vim.api.nvim_create_autocmd('BufWritePre', {
-                        group = fmt_group,
-                        buffer = event.buf,
-                        callback = function()
-                            vim.lsp.buf.format {
-                                bufnr = event.buf,
-                                async = false,
-                                timeout_ms = 3000,
-                            }
-                        end,
-                    })
-                end
                 -- The following code creates a keymap to toggle inlay hints in your
                 -- code, if the language server you are using supports them
                 --

@@ -6,7 +6,7 @@ return { -- Autoformat
     {
       '<leader>f',
       function()
-        require('conform').format { async = true, lsp_format = 'fallback' }
+        require('conform').format { async = true, lsp_format = 'never' }
       end,
       mode = '',
       desc = '[F]ormat buffer',
@@ -24,7 +24,7 @@ return { -- Autoformat
       else
         return {
           timeout_ms = 500,
-          lsp_format = 'fallback',
+          lsp_format = 'never',
         }
       end
     end,
@@ -35,10 +35,10 @@ return { -- Autoformat
       sh = { 'shfmt' },
       bash = { 'shfmt' },
       markdown = { 'mdformat' },
-      javascript = { 'prettierd', 'prettier' },
-      javascriptreact = { 'prettierd', 'prettier' }, -- JSX
-      typescript = { 'prettierd', 'prettier' },
-      typescriptreact = { 'prettierd', 'prettier' }, -- TSX
+      javascript = { 'prettierd', 'prettier', stop_after_first = true },
+      javascriptreact = { 'prettierd', 'prettier', stop_after_first = true }, -- JSX
+      typescript = { 'prettierd', 'prettier', stop_after_first = true },
+      typescriptreact = { 'prettierd', 'prettier', stop_after_first = true }, -- TSX
       json = { 'prettierd', 'prettier' },
       css = { 'prettierd', 'prettier' },
       yaml = { 'prettierd', 'prettier' },
