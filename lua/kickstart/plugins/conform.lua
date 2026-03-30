@@ -30,7 +30,7 @@ return { -- Autoformat
     end,
     formatters_by_ft = {
       lua = { 'stylua' },
-      python = { 'black' },
+      python = { 'ruff', 'ruff_format' },
       rust = { 'rustfmt' },
       sh = { 'shfmt' },
       bash = { 'shfmt' },
@@ -54,6 +54,16 @@ return { -- Autoformat
         prepend_args = { '-i', '4', '-ci', '-sr', '-bn', '-kp' },
       },
       mdformat = { prepend_args = { '--wrap', '100' } },
+      ruff_format = {
+        prepend_args = { '--line-length', '100' },
+      },
+      ruff = {
+        prepend_args = {
+          '--select', 'E,W,F,I',
+          '--line-length', '100',
+          '--task-tags', 'TODO,FIXME,XXX,HACK,NOTE,FIX,BUG',
+        },
+      },
     },
   },
 }
