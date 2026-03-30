@@ -46,7 +46,8 @@ function source:get_trigger_characters()
 end
 
 function source:get_completions(ctx, callback)
-  if not ctx.cursor_before_line:match ':[%w_+%-]*$' then
+  local cursor_before_line = ctx.line and ctx.line:sub(1, ctx.cursor and ctx.cursor[2] or #ctx.line) or ''
+  if not cursor_before_line:match ':[%w_+%-]*$' then
     callback { items = {}, is_incomplete_forward = false, is_incomplete_backward = false }
     return
   end
