@@ -58,11 +58,31 @@ return { -- Autoformat
         prepend_args = { '--line-length', '100' },
       },
       ruff = {
-        prepend_args = {
-          '--select', 'E,W,F,I',
-          '--line-length', '100',
-          '--task-tags', 'TODO,FIXME,XXX,HACK,NOTE,FIX,BUG',
-        },
+        args = function(self, ctx)
+          local has_config = #vim.fs.find(
+            { 'ruff.toml', '.ruff.toml' },
+            { upward = true, path = ctx.dirname }
+          ) > 0
+          if not has_config then
+            local pyproject = vim.fs.find('pyproject.toml', { upward = true, path = ctx.dirname })[1]
+            if pyproject then
+              local content = vim.fn.readfile(pyproject)
+              has_config = vim.iter(content):any(function(line)
+                return line:match '%[tool%.ruff'
+              end)
+            end
+          end
+          local args = { 'check' }
+          if not has_config then
+            vim.list_extend(args, {
+              '--select', 'E,W,F,I',
+              '--line-length', '100',
+              '--task-tags', 'TODO,FIXME,XXX,HACK,NOTE,FIX,BUG',
+            })
+          end
+          vim.list_extend(args, { '--fix', '--force-exclude', '--stdin-filename', '$FILENAME', '-' })
+          return args
+        end,
       },
     },
   },
