@@ -55,7 +55,27 @@ return { -- Autoformat
       },
       mdformat = { prepend_args = { '--wrap', '100' } },
       ruff_format = {
-        prepend_args = { '--line-length', '100' },
+        args = function(self, ctx)
+          local has_config = #vim.fs.find(
+            { 'ruff.toml', '.ruff.toml' },
+            { upward = true, path = ctx.dirname }
+          ) > 0
+          if not has_config then
+            local pyproject = vim.fs.find('pyproject.toml', { upward = true, path = ctx.dirname })[1]
+            if pyproject then
+              local content = vim.fn.readfile(pyproject)
+              has_config = vim.iter(content):any(function(line)
+                return line:match '%[tool%.ruff'
+              end)
+            end
+          end
+          local args = { 'format' }
+          if not has_config then
+            vim.list_extend(args, { '--line-length', '100' })
+          end
+          vim.list_extend(args, { '--force-exclude', '--stdin-filename', '$FILENAME', '-' })
+          return args
+        end,
       },
       ruff = {
         args = function(self, ctx)
