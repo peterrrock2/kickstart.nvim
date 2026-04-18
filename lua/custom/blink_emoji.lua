@@ -47,7 +47,8 @@ end
 
 function source:get_completions(ctx, callback)
   local cursor_before_line = ctx.line and ctx.line:sub(1, ctx.cursor and ctx.cursor[2] or #ctx.line) or ''
-  if not cursor_before_line:match ':[%w_+%-]*$' then
+  local start = cursor_before_line:match '():[%w_+%-]*$'
+  if not start then
     callback { items = {}, is_incomplete_forward = false, is_incomplete_backward = false }
     return
   end
@@ -59,12 +60,23 @@ function source:get_completions(ctx, callback)
   end
 
   local items = {}
+  local line = ctx.cursor and ctx.cursor[1] - 1 or 0
+  local start_col = start - 1
+  local end_col = ctx.cursor and ctx.cursor[2] or #ctx.line
   for code, emoji in pairs(map) do
     items[#items + 1] = {
       label = ':' .. code .. ':',
-      insertText = emoji,
+      filterText = code .. ' :' .. code .. ': ' .. emoji,
       kind = vim.lsp.protocol.CompletionItemKind.Text,
       labelDetails = { description = emoji },
+      textEdit = {
+        newText = emoji,
+        range = {
+          start = { line = line, character = start_col },
+          ['end'] = { line = line, character = end_col },
+        },
+      },
+      insertTextFormat = vim.lsp.protocol.InsertTextFormat.PlainText,
     }
   end
 

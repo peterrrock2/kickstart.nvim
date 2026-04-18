@@ -79,7 +79,7 @@ end
 local function expand_at_cursor()
   local map = build_map()
   if not map then
-    return
+    return false
   end
 
   local row, col = unpack(vim.api.nvim_win_get_cursor(0)) -- col is 0-based (byte)
@@ -90,11 +90,11 @@ local function expand_at_cursor()
   local s, e, code = left:find ':([%w_+%-]+):$'
 
   if not code then
-    return
+    return false
   end
   local emoji = map[code]
   if not emoji then
-    return
+    return false
   end
 
   -- Replace from s..e in the LINE (Lua indices are 1-based)
@@ -104,6 +104,7 @@ local function expand_at_cursor()
   -- Put cursor after inserted emoji (compute new col in bytes)
   local before = new_line:sub(1, (s - 1)) .. emoji
   vim.api.nvim_win_set_cursor(0, { row, #before })
+  return true
 end
 
 local function expand_line(line, map)
@@ -146,8 +147,19 @@ local function expand_buffer(bufnr)
   end
 end
 
-local function make_expand_map(typed)
+local function expand_unicode_entity_at_cursor()
+  local ok, unicode_entities = pcall(require, 'custom.unicode_entities')
+  return ok and unicode_entities.expand_at_cursor()
+end
+
+local function make_expand_map(typed, omit_typed_on_expand)
   return function()
+    if expand_unicode_entity_at_cursor() then
+      if omit_typed_on_expand then
+        return ''
+      end
+      return typed
+    end
     vim.schedule(function()
       pcall(expand_at_cursor)
     end)
@@ -166,7 +178,7 @@ local function set_insert_maps(bufnr)
   -- Expand when you "commit" the word (buffer-local insert-mode maps)
   vim.keymap.set('i', '<Space>', make_expand_map ' ', { buffer = bufnr, expr = true, silent = true })
   vim.keymap.set('i', '<CR>', make_expand_map '\n', { buffer = bufnr, expr = true, silent = true })
-  vim.keymap.set('i', '<Tab>', make_expand_map '\t', { buffer = bufnr, expr = true, silent = true })
+  vim.keymap.set('i', '<Tab>', make_expand_map('\t', true), { buffer = bufnr, expr = true, silent = true })
 
   -- Optional: expand before common punctuation
   for _, ch in ipairs { ',', '.', '!', '?', ')', ']', '}', ':', ';' } do

@@ -57,6 +57,16 @@ return { -- Autocompletion
       --
       -- See :h blink-cmp-config-keymap for defining your own keymap
       preset = 'default',
+      ['<Tab>'] = {
+        function()
+          local ok, unicode_entities = pcall(require, 'custom.unicode_entities')
+          if ok and unicode_entities.expand_at_cursor() then
+            return true
+          end
+        end,
+        'snippet_forward',
+        'fallback',
+      },
 
       -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
       --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
@@ -75,10 +85,11 @@ return { -- Autocompletion
     },
 
     sources = {
-      default = { 'lsp', 'path', 'snippets', 'lazydev', 'emoji' },
+      default = { 'lsp', 'path', 'snippets', 'lazydev', 'emoji', 'unicode_entities' },
       providers = {
         lazydev = { module = 'lazydev.integrations.blink', score_offset = 100 },
         emoji = { module = 'custom.blink_emoji', name = 'Emoji' },
+        unicode_entities = { module = 'custom.blink_unicode_entities', name = 'Unicode Entities' },
       },
     },
 
