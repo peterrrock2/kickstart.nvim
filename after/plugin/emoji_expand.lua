@@ -152,17 +152,32 @@ local function expand_unicode_entity_at_cursor()
   return ok and unicode_entities.expand_at_cursor()
 end
 
+local function expand_unicode_entity_pending_char(typed)
+  local ok, unicode_entities = pcall(require, 'custom.unicode_entities')
+  return ok and unicode_entities.expand_pending_char(typed)
+end
+
+local function expand_after_insert()
+  vim.schedule(function()
+    if expand_unicode_entity_at_cursor() then
+      return
+    end
+    pcall(expand_at_cursor)
+  end)
+end
+
 local function make_expand_map(typed, omit_typed_on_expand)
   return function()
+    if expand_unicode_entity_pending_char(typed) then
+      return ''
+    end
     if expand_unicode_entity_at_cursor() then
       if omit_typed_on_expand then
         return ''
       end
       return typed
     end
-    vim.schedule(function()
-      pcall(expand_at_cursor)
-    end)
+    expand_after_insert()
     return typed
   end
 end
@@ -181,17 +196,25 @@ local function set_insert_maps(bufnr)
   vim.keymap.set('i', '<Tab>', make_expand_map('\t', true), { buffer = bufnr, expr = true, silent = true })
 
   -- Optional: expand before common punctuation
-  for _, ch in ipairs { ',', '.', '!', '?', ')', ']', '}', ':', ';' } do
+  for _, ch in ipairs { ',', '.', '!', '?', ')', ']', '}', ':', ';', '-', '>' } do
     vim.keymap.set('i', ch, make_expand_map(ch), { buffer = bufnr, expr = true, silent = true })
   end
 end
 
+local unicode_expand_filetype_blacklist = {
+  -- Add filetypes here to disable insert-mode emoji/unicode expansion.
+  rust = true,
+  sh = true,
+  lua = true,
+  python = true,
+}
+
 -- Reapply insert-mode maps per buffer to avoid being overridden by ftplugins
 vim.api.nvim_create_autocmd({ 'BufEnter', 'FileType' }, {
-  desc = 'Set emoji expansion insert maps',
+  desc = 'Set emoji/unicode expansion insert maps',
   group = vim.api.nvim_create_augroup('emoji-expand-maps', { clear = true }),
   callback = function(args)
-    if vim.bo[args.buf].filetype == 'markdown' then
+    if not unicode_expand_filetype_blacklist[vim.bo[args.buf].filetype] then
       set_insert_maps(args.buf)
     end
   end,
@@ -209,19 +232,16 @@ vim.api.nvim_create_autocmd('BufWritePre', {
 })
 
 -- Debug helpers (avoid redefinition if this file is reloaded)
-if vim.fn.exists(':EmojiExpand') == 0 then
+if vim.fn.exists ':EmojiExpand' == 0 then
   vim.api.nvim_create_user_command('EmojiExpand', function()
     expand_at_cursor()
   end, { desc = 'Expand :shortcode: under cursor' })
 end
 
-if vim.fn.exists(':EmojiStatus') == 0 then
+if vim.fn.exists ':EmojiStatus' == 0 then
   vim.api.nvim_create_user_command('EmojiStatus', function()
     local has = (_G.__gemoji_map ~= nil)
     local readable = (vim.fn.filereadable(cache_file) == 1)
-    vim.notify(
-      ('gemoji: map_loaded=%s cache=%s (%s)'):format(tostring(has), tostring(readable), cache_file),
-      vim.log.levels.INFO
-    )
+    vim.notify(('gemoji: map_loaded=%s cache=%s (%s)'):format(tostring(has), tostring(readable), cache_file), vim.log.levels.INFO)
   end, { desc = 'Show gemoji cache/map status' })
 end

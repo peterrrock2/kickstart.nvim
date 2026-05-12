@@ -2,6 +2,11 @@
 
 local M = {}
 
+M.shortcuts = {
+  { token = '->', char = '→' },
+  { token = '--', char = '—' },
+}
+
 M.entities = {
   -- HTML basics
   amp = '&',
@@ -187,6 +192,18 @@ M.entities = {
 
 local function token_before_cursor(line, col)
   local left = line:sub(1, col)
+
+  for _, shortcut in ipairs(M.shortcuts) do
+    local token = shortcut.token
+    if left:sub(-#token) == token then
+      return {
+        start_col = col - #token,
+        end_col = col,
+        char = shortcut.char,
+      }
+    end
+  end
+
   local start, name = left:match '()::&([%w][%w%d]*);?::$'
   if not start then
     return nil
@@ -206,7 +223,7 @@ function M.expand_at_cursor()
     return false
   end
 
-  local char = M.entities[token.name]
+  local char = token.char or M.entities[token.name]
   if not char then
     return false
   end
@@ -215,6 +232,28 @@ function M.expand_at_cursor()
   vim.api.nvim_set_current_line(new_line)
   vim.api.nvim_win_set_cursor(0, { row, token.start_col + #char })
   return true
+end
+
+function M.expand_pending_char(typed)
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = vim.api.nvim_get_current_line()
+  local left = line:sub(1, col)
+
+  for _, shortcut in ipairs(M.shortcuts) do
+    local token = shortcut.token
+    if token:sub(-#typed) == typed then
+      local prefix = token:sub(1, #token - #typed)
+      if prefix ~= '' and left:sub(-#prefix) == prefix then
+        local start_col = col - #prefix
+        local new_line = line:sub(1, start_col) .. shortcut.char .. line:sub(col + 1)
+        vim.api.nvim_set_current_line(new_line)
+        vim.api.nvim_win_set_cursor(0, { row, start_col + #shortcut.char })
+        return true
+      end
+    end
+  end
+
+  return false
 end
 
 function M.completion_prefix(ctx)

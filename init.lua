@@ -52,8 +52,10 @@ vim.schedule(function()
   local in_ssh = vim.env.SSH_TTY or vim.env.SSH_CONNECTION
   local in_tmux = vim.env.TMUX ~= nil
 
-  if in_ssh then
+  if in_ssh or in_tmux then
     -- Do NOT redirect unnamed register to +, otherwise `p` breaks if paste isn't available.
+    -- In tmux, system-clipboard round-trips also drop the linewise regtype, so `yy`→`p`
+    -- pastes inline instead of as a new line. OSC52 mirror handles outbound copy.
     vim.opt.clipboard = ''
 
     -- Configure OSC52 provider (copy works; paste not supported)
@@ -76,7 +78,7 @@ vim.schedule(function()
       }
     end
   else
-    -- Local session: normal system clipboard integration
+    -- Local non-tmux session: normal system clipboard integration
     vim.opt.clipboard = 'unnamedplus'
   end
 end)
@@ -275,10 +277,14 @@ vim.keymap.set('n', '<C-k>', ':m -2<CR>', { desc = 'Move line up 1' })
 vim.keymap.set('i', '<C-k>', '<Esc>:m -2<CR>', { desc = 'Move line up 1' })
 
 -- NOTE: Peter keybinds start
+--
+-- IO
 vim.keymap.set('n', '<C-s>', ':wa<CR>', { desc = 'Save the file in the current buffer' })
 vim.keymap.set('i', '<C-s>', '<Esc>:wa<CR>i', { desc = 'Save the file in the current buffer' })
 vim.keymap.set('n', '<M-S-q>', ':wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
 vim.keymap.set('i', '<M-S-q>', '<Esc>:wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
+
+-- Buffer Movement
 vim.keymap.set('n', '<C-M-Left>', ':BufferLineMovePrev<CR>', { desc = 'Moves buffer left' })
 vim.keymap.set('n', '<C-M-Right>', ':BufferLineMoveNext<CR>', { desc = 'Moves buffer right' })
 vim.keymap.set('i', '<M-h>', '<Esc>:BufferLineCyclePrev<CR>', { desc = 'Move to the previous buffer' })
@@ -287,15 +293,26 @@ vim.keymap.set('n', '<M-h>', ':BufferLineCyclePrev<CR>', { desc = 'Move to the p
 vim.keymap.set('n', '<M-l>', ':BufferLineCycleNext<CR>', { desc = 'Move to the next buffer' })
 vim.keymap.set('n', '<M-S-c>', ':bp | bd #<CR>', { desc = 'Close current buffer' })
 vim.keymap.set('i', '<M-S-c>', '<Esc>:bp | bd #<CR>', { desc = 'Close current buffer' })
+
+-- Panels
 vim.keymap.set('n', '<M-c>', '<C-w>c', { desc = 'Close current panel' })
 vim.keymap.set('i', '<M-c>', '<Esc><C-w>c', { desc = 'Close current panel' })
+
+-- Text
 vim.keymap.set('i', '<C-h>', '<C-w>', { noremap = true, silent = true, desc = 'Delete the previous word' })
 vim.keymap.set('i', '<C-BS>', '<C-w>', { noremap = true, silent = true, desc = 'Delete the previous word' })
 vim.keymap.set('i', '<C-Del>', '<C-o>dw', { noremap = true, silent = true, desc = 'Delete the next word' })
 vim.keymap.set('i', '<C-Right>', '<C-o>e<C-o>a', { desc = 'Move to the end of the next word with insert' })
 vim.keymap.set('i', '<C-Left>', '<C-o>b', { desc = 'Move to the beginning of the next word with insert' })
+vim.keymap.set('i', '<M-->', '—', { desc = 'Insert emdash' })
+vim.keymap.set('i', '<M-Right>', '→', { desc = 'Insert →' })
+vim.keymap.set('i', '<M-S-Right>', '⇒', { desc = 'Insert ⇒' })
+
+-- Git
 vim.keymap.set('x', 'gr', '<cmd>diffget<CR>', { desc = 'DiffGet on the selected text', silent = true })
 vim.keymap.set('x', 'gs', '<cmd>diffput<CR>', { desc = 'DiffPut on the selected text', silent = true })
+
+-- Markdown
 vim.keymap.set('n', '<leader>mp', '<cmd>PeekToggle<CR>', { desc = 'Markdown Preview (peek)' })
 
 --
