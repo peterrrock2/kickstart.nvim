@@ -4,7 +4,10 @@ local M = {}
 
 M.shortcuts = {
   { token = '->', char = '→' },
-  { token = '--', char = '—' },
+  { token = '=>', char = '⇒' },
+  { token = '>==', char = '≥' },
+  { token = '<==', char = '≤' },
+  { token = '!==', char = '≠' },
 }
 
 M.entities = {
