@@ -26,5 +26,31 @@ return {
         title_pos = 'center',
       },
     }
+
+    -- Make terminal buffers show up in bufferline and snipe (gb)
+    vim.api.nvim_create_autocmd('TermOpen', {
+      callback = function()
+        vim.bo.buflisted = true
+      end,
+    })
+
+    -- Full-window terminal in a new buffer (Alt+t)
+    vim.keymap.set('n', '<M-S-t>', function()
+      vim.cmd 'enew'
+      vim.cmd 'terminal'
+      vim.cmd 'startinsert'
+    end, { desc = 'Open terminal in new full buffer' })
+
+    -- Horizontal split terminal (Alt+S+h)
+    vim.keymap.set('n', '<M-4>', function()
+      vim.cmd 'split | terminal'
+      vim.cmd 'startinsert'
+    end, { desc = 'Open terminal in horizontal split' })
+
+    -- Vertical split terminal (Alt+v) — 50% width
+    vim.keymap.set('n', '<M-v>', function()
+      vim.cmd(math.floor(vim.o.columns * 0.5) .. 'vsplit | terminal')
+      vim.cmd 'startinsert'
+    end, { desc = 'Open terminal in vertical split' })
   end,
 }
