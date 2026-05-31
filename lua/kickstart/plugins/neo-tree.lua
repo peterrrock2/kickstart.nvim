@@ -14,6 +14,10 @@ return {
     { '\\', ':Neotree reveal<CR>', desc = 'NeoTree reveal', silent = true },
   },
   opts = {
+    -- By default neo-tree refuses to open files into a terminal window and
+    -- falls back to vsplit. Remove "terminal" from the list so it will open
+    -- normally into whatever window was last focused (even if it was a terminal).
+    open_files_do_not_replace_types = { 'trouble', 'qf' },
     default_component_configs = {
       name = { use_git_status_colors = true },
       git_status = {

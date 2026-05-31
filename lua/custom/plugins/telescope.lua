@@ -47,11 +47,18 @@ return { -- Fuzzy Finder (files, lsp, etc)
       -- You can put your default mappings / updates / etc. in here
       --  All the info you're looking for is in `:help telescope.setup()`
       --
-      -- defaults = {
-      --   mappings = {
-      --     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
-      --   },
-      -- },
+      defaults = {
+        -- When opening a file, skip any window containing a terminal buffer
+        -- (Neovim can't :edit into a terminal window, so without this telescope
+        -- falls back to vsplit whenever a terminal was the last focused window)
+        get_selection_window = function()
+          local wins = vim.api.nvim_list_wins()
+          wins = vim.tbl_filter(function(w)
+            return vim.api.nvim_get_option_value('buftype', { buf = vim.api.nvim_win_get_buf(w) }) ~= 'terminal'
+          end, wins)
+          return wins[1] or vim.api.nvim_get_current_win()
+        end,
+      },
       -- pickers = {}
       extensions = {
         ['ui-select'] = {
