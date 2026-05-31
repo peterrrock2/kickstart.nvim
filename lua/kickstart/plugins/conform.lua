@@ -34,6 +34,7 @@ return { -- Autoformat
       rust = { 'rustfmt' },
       sh = { 'shfmt' },
       bash = { 'shfmt' },
+      go = { 'goimports' },
       markdown = { 'mdformat' },
       javascript = { 'prettierd', 'prettier', stop_after_first = true },
       javascriptreact = { 'prettierd', 'prettier', stop_after_first = true }, -- JSX
