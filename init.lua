@@ -45,41 +45,51 @@ vim.o.showmode = true
 -- Clipboard (local + SSH + tmux)
 -- ===============================
 -- Goal:
---   - Local (not SSH): yanks go to system clipboard via 'unnamedplus'
---   - SSH: keep normal y/p working (internal registers),
---          but ALSO mirror yanks to local clipboard via OSC52.
+--   - X11 reachable (local terminal, local tmux, SSH with X forwarding):
+--     yanks and pastes use the system clipboard via 'unnamedplus' + xclip.
+--   - No X11 (SSH, with or without tmux): keep normal y/p on internal
+--     registers (OSC52 round-trips drop the linewise regtype), mirror yanks
+--     to the client clipboard via OSC52, and answer `"+p` by querying the
+--     terminal (tmux replies from its buffer; kitty asks permission).
+local function clipboard_uses_osc52()
+  -- Inside tmux, always route through OSC52. tmux ('set-clipboard on') forwards
+  -- it to whichever client is currently attached, so the clipboard follows the
+  -- human whether they're local or over SSH. Crucially, a pane created before
+  -- an SSH reattach keeps the stale $DISPLAY from the original local session
+  -- (DISPLAY is in tmux's update-environment, refreshed only for new panes), so
+  -- trusting $DISPLAY here would pick xclip and copy to the origin machine's X
+  -- selection instead of the attached client.
+  if vim.env.TMUX and vim.env.TMUX ~= '' then
+    return true
+  end
+  return not (vim.env.DISPLAY and vim.env.DISPLAY ~= '' and vim.fn.executable 'xclip' == 1)
+end
+
 vim.schedule(function()
-  local in_ssh = vim.env.SSH_TTY or vim.env.SSH_CONNECTION
-  local in_tmux = vim.env.TMUX ~= nil
-
-  if in_ssh or in_tmux then
-    -- Do NOT redirect unnamed register to +, otherwise `p` breaks if paste isn't available.
-    -- In tmux, system-clipboard round-trips also drop the linewise regtype, so `yy`→`p`
-    -- pastes inline instead of as a new line. OSC52 mirror handles outbound copy.
-    vim.opt.clipboard = ''
-
-    -- Configure OSC52 provider (copy works; paste not supported)
-    local ok, osc52 = pcall(require, 'vim.ui.clipboard.osc52')
-    if ok then
-      local function no_paste()
-        return { {}, '' }
-      end
-
-      vim.g.clipboard = {
-        name = 'OSC52 (copy only)',
-        copy = {
-          ['+'] = osc52.copy '+',
-          ['*'] = osc52.copy '*',
-        },
-        paste = {
-          ['+'] = no_paste,
-          ['*'] = no_paste,
-        },
-      }
-    end
-  else
-    -- Local non-tmux session: normal system clipboard integration
+  if not clipboard_uses_osc52() then
+    -- X11 session: normal system clipboard integration
     vim.opt.clipboard = 'unnamedplus'
+    return
+  end
+
+  -- Do NOT redirect unnamed register to +, otherwise `p` breaks if the
+  -- terminal refuses clipboard reads, and `yy`→`p` would paste inline
+  -- instead of as a new line. OSC52 mirror handles outbound copy.
+  vim.opt.clipboard = ''
+
+  local ok, osc52 = pcall(require, 'vim.ui.clipboard.osc52')
+  if ok then
+    vim.g.clipboard = {
+      name = 'OSC52',
+      copy = {
+        ['+'] = osc52.copy '+',
+        ['*'] = osc52.copy '*',
+      },
+      paste = {
+        ['+'] = osc52.paste '+',
+        ['*'] = osc52.paste '*',
+      },
+    }
   end
 end)
 
@@ -103,10 +113,9 @@ vim.api.nvim_create_autocmd('TextYankPost', {
       return
     end
 
-    -- only over SSH or inside tmux (OSC52 helps when tmux blocks clipboard)
-    local in_ssh = vim.env.SSH_TTY or vim.env.SSH_CONNECTION
-    local in_tmux = vim.env.TMUX ~= nil
-    if not in_ssh and not in_tmux then
+    -- only when the system clipboard isn't directly reachable;
+    -- with X11 available, 'unnamedplus' already covers it
+    if not clipboard_uses_osc52() then
       return
     end
 
@@ -423,6 +432,25 @@ vim.filetype.add {
     pxi = 'python',
   },
 }
+
+-- New/empty buffers only get content-based filetype detection (e.g. a
+-- `#!/usr/bin/env bash` shebang) on BufRead, i.e. when an existing file is
+-- opened from disk. So creating a fresh script and typing the shebang leaves
+-- the filetype unset (no syntax/LSP) until the file is reopened. Re-run
+-- detection from the buffer's content whenever it still has no filetype.
+vim.api.nvim_create_autocmd({ 'BufWritePost', 'InsertLeave' }, {
+  desc = 'Detect filetype from content (e.g. shebang) for new buffers',
+  group = vim.api.nvim_create_augroup('detect-filetype-on-edit', { clear = true }),
+  callback = function(args)
+    if vim.bo[args.buf].filetype ~= '' then
+      return
+    end
+    -- Full native detection (vs. setting &filetype directly) so flavor flags
+    -- like b:is_bash get set exactly as they would on reopen. These events
+    -- only fire for the current buffer, so detection runs on the right one.
+    vim.cmd 'filetype detect'
+  end,
+})
 
 -- -- === Black & White baseline highlights ===
 -- local hi = vim.api.nvim_set_hl
