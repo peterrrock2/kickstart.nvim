@@ -4,6 +4,11 @@ local cache_dir = vim.fn.stdpath 'data' .. '/gemoji'
 local cache_file = cache_dir .. '/emoji.json'
 local gemoji_url = 'https://raw.githubusercontent.com/github/gemoji/master/db/emoji.json'
 
+-- Shortcodes to never auto-expand (still available via completion).
+local expand_shortcode_blacklist = {
+  link = true,
+}
+
 local function ensure_dir()
   if vim.fn.isdirectory(cache_dir) == 0 then
     vim.fn.mkdir(cache_dir, 'p')
@@ -92,6 +97,9 @@ local function expand_at_cursor()
   if not code then
     return false
   end
+  if expand_shortcode_blacklist[code] then
+    return false
+  end
   local emoji = map[code]
   if not emoji then
     return false
@@ -109,6 +117,9 @@ end
 
 local function expand_line(line, map)
   return line:gsub(':([%w_+%-]+):', function(code)
+    if expand_shortcode_blacklist[code] then
+      return ':' .. code .. ':'
+    end
     return map[code] or (':' .. code .. ':')
   end)
 end
