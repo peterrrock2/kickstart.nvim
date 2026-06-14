@@ -35,7 +35,7 @@ return { -- Autoformat
       sh = { 'shfmt' },
       bash = { 'shfmt' },
       go = { 'goimports' },
-      markdown = { 'mdformat' },
+      markdown = { 'prettierd', 'prettier', stop_after_first = true },
       javascript = { 'prettierd', 'prettier', stop_after_first = true },
       javascriptreact = { 'prettierd', 'prettier', stop_after_first = true }, -- JSX
       typescript = { 'prettierd', 'prettier', stop_after_first = true },
