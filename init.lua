@@ -290,8 +290,12 @@ vim.keymap.set('i', '<C-k>', '<Esc>:m -2<CR>', { desc = 'Move line up 1' })
 -- IO
 vim.keymap.set('n', '<C-s>', ':wa<CR>', { desc = 'Save the file in the current buffer' })
 vim.keymap.set('i', '<C-s>', '<Esc>:wa<CR>i', { desc = 'Save the file in the current buffer' })
-vim.keymap.set('n', '<M-S-q>', ':wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
-vim.keymap.set('i', '<M-S-q>', '<Esc>:wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
+-- Bind both <M-q> and <M-Q>: with macOS Option-as-Meta the terminal sends ESC+q
+-- (lowercase) even with Shift held, so <M-S-q> never matches. Cover both cases.
+vim.keymap.set('n', '<M-q>', ':wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
+vim.keymap.set('i', '<M-q>', '<Esc>:wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
+vim.keymap.set('n', '<M-Q>', ':wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
+vim.keymap.set('i', '<M-Q>', '<Esc>:wa <CR>:qa!<CR>', { desc = 'Quits out of everything' })
 
 -- Buffer Movement
 vim.keymap.set('n', '<C-M-Left>', ':BufferLineMovePrev<CR>', { desc = 'Moves buffer left' })
