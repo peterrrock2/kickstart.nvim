@@ -103,6 +103,23 @@ return {
       window = {
         mappings = {
           ['\\'] = 'close_window',
+          ['Y'] = function(state)
+            local node = state.tree:get_node()
+            local path = node:get_id()
+            vim.fn.setreg('+', path)
+            vim.fn.setreg('"', path) -- so plain `p` pastes it even when clipboard=''
+            -- Flash the yanked line so the yank is visible.
+            local buf = vim.api.nvim_get_current_buf()
+            local line = vim.api.nvim_win_get_cursor(0)[1] - 1
+            local ns = vim.api.nvim_create_namespace 'neotree_yank_flash'
+            vim.api.nvim_buf_add_highlight(buf, ns, 'IncSearch', line, 0, -1)
+            vim.defer_fn(function()
+              if vim.api.nvim_buf_is_valid(buf) then
+                vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+              end
+            end, 200)
+            vim.notify('Yanked: ' .. path)
+          end,
         },
         position = 'right',
       },
