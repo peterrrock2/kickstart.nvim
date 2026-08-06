@@ -3,11 +3,11 @@
 local M = {}
 
 M.shortcuts = {
-  { token = '->', char = '→' },
-  { token = '=>', char = '⇒' },
-  { token = '>==', char = '≥' },
-  { token = '<==', char = '≤' },
-  { token = '!==', char = '≠' },
+  { token = '->!', char = '→' },
+  { token = '=>!', char = '⇒' },
+  { token = '>==!', char = '≥' },
+  { token = '<==!', char = '≤' },
+  { token = '!==!', char = '≠' },
 }
 
 M.entities = {
@@ -237,26 +237,28 @@ function M.expand_at_cursor()
   return true
 end
 
-function M.expand_pending_char(typed)
-  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+-- Expansion as keystrokes, for |expr| mappings: those may not edit the buffer (E565).
+-- Returns `keys, swallow`, where `swallow` means `typed` completed a shortcut and should
+-- not be inserted. Returns nil when there is nothing to expand.
+function M.expand_keys(typed)
+  local col = vim.api.nvim_win_get_cursor(0)[2]
   local line = vim.api.nvim_get_current_line()
   local left = line:sub(1, col)
 
   for _, shortcut in ipairs(M.shortcuts) do
-    local token = shortcut.token
-    if token:sub(-#typed) == typed then
-      local prefix = token:sub(1, #token - #typed)
-      if prefix ~= '' and left:sub(-#prefix) == prefix then
-        local start_col = col - #prefix
-        local new_line = line:sub(1, start_col) .. shortcut.char .. line:sub(col + 1)
-        vim.api.nvim_set_current_line(new_line)
-        vim.api.nvim_win_set_cursor(0, { row, start_col + #shortcut.char })
-        return true
-      end
+    local prefix = shortcut.token:sub(1, #shortcut.token - #typed)
+    if shortcut.token:sub(-#typed) == typed and prefix ~= '' and left:sub(-#prefix) == prefix then
+      return string.rep('<BS>', #prefix) .. shortcut.char, true
     end
   end
 
-  return false
+  local token = token_before_cursor(line, col)
+  local char = token and (token.char or M.entities[token.name])
+  if not char then
+    return nil
+  end
+  -- Tokens are ASCII, so byte count is the backspace count.
+  return string.rep('<BS>', token.end_col - token.start_col) .. char, false
 end
 
 function M.completion_prefix(ctx)

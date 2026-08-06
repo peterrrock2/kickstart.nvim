@@ -60,7 +60,11 @@ return { -- Autocompletion
       ['<Tab>'] = {
         function()
           local ok, unicode_entities = pcall(require, 'custom.unicode_entities')
-          if ok and unicode_entities.expand_at_cursor() then
+          local keys = ok and unicode_entities.expand_keys '\t'
+          if keys then
+            -- blink runs this from an |expr| mapping, which may not edit the buffer,
+            -- so the expansion goes in as keystrokes ahead of any pending input.
+            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), 'ni', false)
             return true
           end
         end,

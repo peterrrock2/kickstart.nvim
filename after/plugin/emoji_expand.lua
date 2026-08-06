@@ -163,9 +163,12 @@ local function expand_unicode_entity_at_cursor()
   return ok and unicode_entities.expand_at_cursor()
 end
 
-local function expand_unicode_entity_pending_char(typed)
+local function expand_unicode_entity_keys(typed)
   local ok, unicode_entities = pcall(require, 'custom.unicode_entities')
-  return ok and unicode_entities.expand_pending_char(typed)
+  if not ok then
+    return nil
+  end
+  return unicode_entities.expand_keys(typed)
 end
 
 local function expand_after_insert()
@@ -179,19 +182,20 @@ end
 
 local function make_expand_map(typed, omit_typed_on_expand)
   return function()
-    if expand_unicode_entity_pending_char(typed) then
-      return ''
-    end
-    if expand_unicode_entity_at_cursor() then
-      if omit_typed_on_expand then
-        return ''
+    local keys, swallow_typed = expand_unicode_entity_keys(typed)
+    if keys then
+      if swallow_typed or omit_typed_on_expand then
+        return keys
       end
-      return typed
+      return keys .. typed
     end
     expand_after_insert()
     return typed
   end
 end
+
+-- Punctuation that also "commits" a pending token.
+local punctuation_keys = { ',', '.', '!', '?', ')', ']', '}', ':', ';', '-', '>' }
 
 local function set_insert_maps(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -206,9 +210,19 @@ local function set_insert_maps(bufnr)
   vim.keymap.set('i', '<CR>', make_expand_map '\n', { buffer = bufnr, expr = true, silent = true })
   vim.keymap.set('i', '<Tab>', make_expand_map('\t', true), { buffer = bufnr, expr = true, silent = true })
 
-  -- Optional: expand before common punctuation
-  for _, ch in ipairs { ',', '.', '!', '?', ')', ']', '}', ':', ';', '-', '>' } do
+  for _, ch in ipairs(punctuation_keys) do
     vim.keymap.set('i', ch, make_expand_map(ch), { buffer = bufnr, expr = true, silent = true })
+  end
+end
+
+-- BufEnter can fire before the filetype is known, so a buffer that later turns out to be
+-- blacklisted still has the maps and needs them taken back off.
+local function clear_insert_maps(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  for _, key in ipairs(vim.list_extend({ '<Space>', '<CR>', '<Tab>' }, punctuation_keys)) do
+    pcall(vim.keymap.del, 'i', key, { buffer = bufnr })
   end
 end
 
@@ -225,7 +239,9 @@ vim.api.nvim_create_autocmd({ 'BufEnter', 'FileType' }, {
   desc = 'Set emoji/unicode expansion insert maps',
   group = vim.api.nvim_create_augroup('emoji-expand-maps', { clear = true }),
   callback = function(args)
-    if not unicode_expand_filetype_blacklist[vim.bo[args.buf].filetype] then
+    if unicode_expand_filetype_blacklist[vim.bo[args.buf].filetype] then
+      clear_insert_maps(args.buf)
+    else
       set_insert_maps(args.buf)
     end
   end,
