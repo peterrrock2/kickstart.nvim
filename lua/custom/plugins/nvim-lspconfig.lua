@@ -220,6 +220,12 @@ return {
       --   },
       -- },
       pyright = {
+        before_init = function(_, config)
+          local python = vim.fs.joinpath(config.root_dir, '.venv', vim.fn.has 'win32' == 1 and 'Scripts/python.exe' or 'bin/python')
+          if vim.fn.executable(python) == 1 then
+            config.settings.python.pythonPath = python
+          end
+        end,
         settings = {
           python = {
             analysis = {
