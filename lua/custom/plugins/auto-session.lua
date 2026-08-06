@@ -1,3 +1,17 @@
+local function prune_missing_buffers()
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    if
+      vim.bo[bufnr].buflisted
+      and not vim.api.nvim_buf_is_loaded(bufnr)
+      and name ~= ''
+      and not vim.uv.fs_stat(name)
+    then
+      vim.api.nvim_buf_delete(bufnr, {})
+    end
+  end
+end
+
 return {
   'rmagatti/auto-session',
   lazy = false,
@@ -16,6 +30,8 @@ return {
     auto_restore_last_session = false,
     cwd_change_handling = true,
     use_git_branch_name = true,
+    pre_save_cmds = { prune_missing_buffers },
+    post_restore_cmds = { prune_missing_buffers },
 
     -- Show restore errors but keep auto-save enabled, so a stale session entry
     -- (e.g. a deleted file image.nvim chokes on) gets overwritten on exit
