@@ -256,6 +256,12 @@ vim.keymap.set('n', '<leader>q', function()
   diag_loclist_with_source(0) -- current buffer
 end, { desc = 'Diagnostics → Loclist (with source)' })
 
+local diagnostics_virtual_text_enabled = true
+vim.keymap.set('n', '<leader>td', function()
+  diagnostics_virtual_text_enabled = not diagnostics_virtual_text_enabled
+  vim.diagnostic.config { virtual_text = diagnostics_virtual_text_enabled }
+end, { desc = '[T]oggle [D]iagnostic virtual text' })
+
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
 -- is not what someone will guess without a bit more experience.
@@ -320,6 +326,10 @@ vim.keymap.set('i', '<C-Left>', '<C-o>b', { desc = 'Move to the beginning of the
 vim.keymap.set('i', '<M-->', '—', { desc = 'Insert emdash' })
 vim.keymap.set('i', '<M-Right>', '→', { desc = 'Insert →' })
 vim.keymap.set('i', '<M-S-Right>', '⇒', { desc = 'Insert ⇒' })
+vim.keymap.set('i', '<M-d>', '─', { desc = 'Insert horizontal tree line' })
+vim.keymap.set('i', '<M-v>', '│', { desc = 'Insert vertical tree line' })
+vim.keymap.set('i', '<M-b>', '├', { desc = 'Insert tree branch' })
+vim.keymap.set('i', '<M-e>', '└', { desc = 'Insert last tree branch' })
 
 -- Git
 vim.keymap.set('x', 'gr', '<cmd>diffget<CR>', { desc = 'DiffGet on the selected text', silent = true })
