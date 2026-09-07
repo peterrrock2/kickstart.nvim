@@ -138,7 +138,11 @@ vim.opt.exrc = true
 vim.opt.secure = true
 
 -- Enable break indent
-vim.o.breakindent = true
+vim.o.wrap = true
+vim.o.linebreak = true
+vim.opt.breakindent = true
+vim.opt.showbreak = '↪ '
+vim.opt.breakindentopt = 'shift:2,min:40,sbr'
 
 -- Save undo history
 vim.o.undofile = true
@@ -282,6 +286,14 @@ vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' }
 --  See `:help wincmd` for a list of all window commands
 --
 -- NOTE: Movement keybinds
+vim.keymap.set({ 'n', 'x' }, 'j', function()
+  return vim.v.count == 0 and 'gj' or 'j'
+end, { expr = true, silent = true, desc = 'Move down by display line' })
+
+vim.keymap.set({ 'n', 'x' }, 'k', function()
+  return vim.v.count == 0 and 'gk' or 'k'
+end, { expr = true, silent = true, desc = 'Move up by display line' })
+
 vim.keymap.set('n', '<M-S-h>', '<C-w><C-h>', { desc = 'Move focus to the left window' })
 vim.keymap.set('n', '<M-S-l>', '<C-w><C-l>', { desc = 'Move focus to the right window' })
 vim.keymap.set('n', '<M-S-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
@@ -330,6 +342,14 @@ vim.keymap.set('i', '<M-d>', '─', { desc = 'Insert horizontal tree line' })
 vim.keymap.set('i', '<M-v>', '│', { desc = 'Insert vertical tree line' })
 vim.keymap.set('i', '<M-b>', '├', { desc = 'Insert tree branch' })
 vim.keymap.set('i', '<M-e>', '└', { desc = 'Insert last tree branch' })
+
+local function toggle_word_wrap()
+  vim.o.wrap = not vim.o.wrap
+  vim.o.linebreak = vim.o.linebreak
+end
+
+vim.keymap.set('i', '<leader>tw', toggle_word_wrap, { desc = 'Toggle [W]ord wrap' })
+vim.keymap.set('n', '<leader>tw', toggle_word_wrap, { desc = 'Toggle [W]ord wrap' })
 
 -- Git
 vim.keymap.set('x', 'gr', '<cmd>diffget<CR>', { desc = 'DiffGet on the selected text', silent = true })
