@@ -1,6 +1,10 @@
 return {
   '3rd/image.nvim',
   build = false,
+  config = function(_, opts)
+    require('custom.image_preview').setup()
+    require('image').setup(opts)
+  end,
   opts = {
     backend = 'kitty', -- or "ueberzug" or "sixel"
     processor = 'magick_cli', -- or "magick_rock"
@@ -40,6 +44,6 @@ return {
     window_overlap_clear_ft_ignore = {},
     editor_only_render_when_focused = false, -- auto show/hide images when the editor gains/looses focus
     tmux_show_only_in_active_window = true, -- auto show/hide images in the correct Tmux window (needs visual-activity off)
-    hijack_file_patterns = { '*.png', '*.jpg', '*.jpeg', '*.gif', '*.webp', '*.avif' }, -- render image files as images when opened
+    hijack_file_patterns = { '*.png', '*.jpg', '*.jpeg', '*.gif', '*.webp', '*.avif', '*.pdf' }, -- render image files as images when opened
   },
 }
