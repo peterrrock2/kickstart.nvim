@@ -404,7 +404,19 @@ require('lazy').setup({
   'NMAC427/guess-indent.nvim', -- Detect tabstop and shiftwidth automatically
 
   -- Highlight todo, notes, etc in comments
-  { 'folke/todo-comments.nvim', event = 'VimEnter', dependencies = { 'nvim-lua/plenary.nvim' }, opts = { signs = false } },
+  {
+    'folke/todo-comments.nvim',
+    event = 'VimEnter',
+    dependencies = { 'nvim-lua/plenary.nvim' },
+    opts = function()
+      return {
+        signs = false,
+        keywords = {
+          REVNOTE = { icon = ' ', color = require('glowdeep.palette').dark.pink },
+        },
+      }
+    end,
+  },
 
   require 'kickstart.plugins.autopairs',
   require 'kickstart.plugins.blink', -- autocompletion
