@@ -23,26 +23,47 @@ package.loaded['image/utils/term'] = {
 local transmitted, displayed = {}, {}
 local graphics = {}
 local fail_display = false
+local tile_cache = require('custom.image_preview_cache')
+local get_plan, current_view = tile_cache.get
+tile_cache.get = function(view, viewport, ready)
+  current_view = view
+  return get_plan(view, viewport, ready)
+end
+local function placement_key(payload)
+  return payload.image_id .. ':' .. (payload.placement_id or 0)
+end
 package.loaded['image/utils/tmux'] = { is_tmux = false }
 package.loaded['image/backends/kitty/helpers'] = {
   write_graphics = function(payload, path)
     graphics[#graphics + 1] = vim.deepcopy(payload)
     if payload.action == 't' then
       transmitted[payload.image_id] = path
+    elseif payload.action == 'd' and payload.display_delete == 'a' then
+      displayed = {}
     elseif payload.action == 'd' and payload.image_id then
-      displayed[payload.image_id] = nil
+      for key, placement in pairs(displayed) do
+        if
+          placement.image_id == payload.image_id
+          and (not payload.placement_id or placement.placement_id == payload.placement_id)
+        then
+          displayed[key] = nil
+        end
+      end
       if payload.display_delete == 'I' then
         transmitted[payload.image_id] = nil
       end
     end
   end,
-  write_graphics_at = function(payload)
+  write_graphics_at = function(payload, column, row)
     if fail_display then
       fail_display = false
       error('Simulated terminal display failure')
     end
     graphics[#graphics + 1] = vim.deepcopy(payload)
-    displayed[payload.image_id] = transmitted[payload.image_id]
+    assert(transmitted[payload.image_id], 'Placement used an image that was not uploaded')
+    local placement = vim.deepcopy(payload)
+    placement.column, placement.row = column, row
+    displayed[placement_key(payload)] = placement
   end,
 }
 
@@ -83,72 +104,199 @@ vim.api.nvim_buf_set_name(0, source)
 local function settle(image)
   assert(
     vim.wait(10000, function()
-      return image.is_rendered and image.rendered_geometry.width and not image.pending_transform_key
+      return image.is_rendered
+        and image.rendered_geometry.width
+        and not image.pending_transform_key
+        and not (
+          current_view
+          and current_view.cache
+          and (current_view.cache.demand or current_view.cache.queued)
+        )
     end, 10),
     'Image did not render'
   )
-  assert(displayed[image.internal_id] == image.cropped_path, 'Kitty displayed an outdated image')
+  assert(next(displayed), 'No image was displayed')
 end
 local image = assert(api.hijack_buffer(source))
 image:render()
 settle(image)
 local initial = vim.deepcopy(image.rendered_geometry)
+-- Panning a fully visible image must leave its existing terminal placement untouched.
+local fitted_placements = vim.deepcopy(displayed)
+local fitted_path = image.path
+local fitted_commands = #graphics
+for _, key in ipairs({ 'h', 'j', 'k', 'l', '10j', '10h' }) do
+  vim.cmd.normal({ key })
+end
+assert(not current_view or not current_view.cache, 'A clamped pan started rendering tiles')
+assert(
+  image.path == fitted_path and vim.deep_equal(displayed, fitted_placements),
+  'Panning a fitted image replaced its placement'
+)
+assert(#graphics == fitted_commands, 'A clamped pan sent terminal graphics commands')
+
+local function check_tiles()
+  local plan = current_view.plan
+  local geometry, bounds = image.rendered_geometry, image.bounds
+  local left = math.max(0, (bounds.left - geometry.x) * term.cell_width)
+  local top = math.max(0, (bounds.top - geometry.y) * term.cell_height)
+  local right = math.min(plan.width, (bounds.right - geometry.x) * term.cell_width)
+  local bottom = math.min(plan.height, (bounds.bottom - geometry.y + 1) * term.cell_height)
+  local rectangles, area = {}, 0
+  for _, payload in ipairs(current_view.placements) do
+    local placement = assert(displayed[placement_key(payload)], 'Tile placement disappeared')
+    local x = (placement.column - 1 - geometry.x) * term.cell_width + placement.display_x_offset
+    local y = (placement.row - 1 - geometry.y) * term.cell_height + placement.display_y_offset
+    local width, height = placement.display_width, placement.display_height
+    assert(
+      x >= left and y >= top and x + width <= right and y + height <= bottom,
+      'Tile extends beyond the viewport'
+    )
+    assert(placement.display_x >= 0 and placement.display_y >= 0)
+    assert(placement.display_x + width <= 256 and placement.display_y + height <= 256)
+    for _, rectangle in ipairs(rectangles) do
+      assert(
+        x >= rectangle.right
+          or x + width <= rectangle.x
+          or y >= rectangle.bottom
+          or y + height <= rectangle.y,
+        'Tile placements overlap'
+      )
+    end
+    rectangles[#rectangles + 1] = { x = x, y = y, right = x + width, bottom = y + height }
+    area = area + width * height
+  end
+  assert(area == (right - left) * (bottom - top), 'Tile placements leave gaps')
+end
+
 local function press(key, wait_for_render)
   local map = vim.fn.maparg(key, 'n', false, true)
   assert(map.buffer == 1 and type(map.callback) == 'function', 'Missing buffer mapping: ' .. key)
-  local previous_id, previous_path, first_command = image.internal_id, image.path, #graphics + 1
-  map.callback()
+  local first_command = #graphics + 1
+  vim.cmd.normal({ key })
   assert(image.is_rendered, 'Preview was cleared while its replacement was being prepared')
+  if wait_for_render == false then
+    return
+  end
+  settle(image)
   if key ~= '0' then
     assert(
       image.transform_key == nil and not image.pending_transform_key,
-      'Prepared frame needed another resize'
+      'Prepared tiles needed another resize'
     )
+    check_tiles()
   end
-  if wait_for_render ~= false then
-    settle(image)
-  end
-  if image.path ~= previous_path then
-    assert(image.internal_id > previous_id, 'Replacement must use a new image id to draw on top')
-    local drawn = false
-    for index = first_command, #graphics do
-      local command = graphics[index]
-      if command.action == 'p' and command.image_id == image.internal_id then
-        drawn = true
-      elseif command.action == 'd' and command.image_id == previous_id then
-        assert(drawn, 'Old image was deleted before its replacement was drawn')
-        assert(command.display_delete == 'I', 'Retired image data was not released')
-      end
+  local drawn = 0
+  local expected = key == '0' and 1 or #current_view.placements
+  for index = first_command, #graphics do
+    local command = graphics[index]
+    if command.action == 't' then
+      assert(drawn == 0, 'Uploading after drawing started exposes a partially updated zoom')
+    elseif command.action == 'p' then
+      drawn = drawn + 1
+    elseif command.action == 'd' then
+      assert(drawn == expected, 'Old image was deleted before every replacement tile was drawn')
     end
-    assert(drawn and not displayed[previous_id], 'Replacement left the old image displayed')
-    assert(not transmitted[previous_id], 'Retired image data accumulated in the terminal')
   end
 end
+
+-- Rapid zooms accumulate immediately without replacing the visible image mid-render.
+local before_zoom = vim.deepcopy(displayed)
+vim.cmd.normal({ '+++' })
+assert(math.abs(current_view.zoom - 1.25 ^ 3) < 1e-8, 'Rapid zoom keys were dropped')
+assert(
+  vim.deep_equal(displayed, before_zoom),
+  'Cold zoom replaced the image before rendering finished'
+)
+local pending_zoom = assert(current_view.cache.demand)
+-- Ordinary image.nvim redraws during the first zoom must not act like a reset.
+local geometry = image.rendered_geometry
+require('image/backends/kitty').render(
+  image,
+  geometry.x,
+  geometry.y,
+  geometry.width,
+  geometry.height
+)
+assert(current_view.cache.demand == pending_zoom, 'Redraw cancelled an in-flight zoom')
+press('0')
+assert(vim.wait(10000, function()
+  return pending_zoom.finished
+end, 5))
+assert(image.path == source and current_view.cache == nil, 'Reset allowed stale zoom completion')
 
 press('+')
 assert(image.rendered_geometry.width > initial.width, 'Zoom did not enlarge the preview')
 press('-')
 assert(math.abs(image.rendered_geometry.width - initial.width) <= 1, 'Zoom out failed')
-local previous_id, previous_frame = image.internal_id, displayed[image.internal_id]
+local fitted_tiles = current_view.plan
+local graphics_before_pan = #graphics
+vim.cmd.normal({ 'hjkl' })
+assert(
+  current_view.plan == fitted_tiles and #graphics == graphics_before_pan,
+  'Panning a fitted tiled view unnecessarily redrew or removed it'
+)
+local upload_start = #graphics + 1
+press('+')
+for index = upload_start, #graphics do
+  assert(graphics[index].action ~= 't', 'Returning to a cached zoom uploaded its tiles again')
+end
+press('-')
+local previous_placements = vim.deepcopy(displayed)
+local draw = require('custom.image_preview_tiles').draw
 fail_display = true
-local ok, err = pcall(vim.fn.maparg('+', 'n', false, true).callback)
+local ok, err = pcall(
+  draw,
+  image,
+  current_view,
+  current_view.plan,
+  image.rendered_geometry.x,
+  image.rendered_geometry.y
+)
 assert(not ok and tostring(err):find('Simulated terminal display failure', 1, true))
-assert(image.internal_id == previous_id and image.is_rendered, 'Failed redraw lost the old image')
-assert(displayed[previous_id] == previous_frame, 'Failed redraw erased the old placement')
-assert(vim.tbl_count(transmitted) == 1, 'Failed redraw leaked an uploaded image')
+assert(image.is_rendered, 'Failed redraw lost the old image')
+assert(vim.deep_equal(displayed, previous_placements), 'Failed redraw erased the old placements')
+press('+')
+assert(not vim.deep_equal(displayed, previous_placements), 'Retry did not replace the old image')
+press('-')
+-- Completing a zoom after tmux focus loss must wait for image.nvim's restore.
+press('+', false)
+image.global_state.disable_decorator_handling = true
+image:clear(true)
+assert(vim.wait(10000, function()
+  return current_view.cache.demand == nil
+end, 5))
+assert(not image.is_rendered and next(displayed) == nil, 'Background zoom drew after focus loss')
+image.global_state.disable_decorator_handling = false
 image:render()
 settle(image)
-assert(
-  image.internal_id > previous_id and not displayed[previous_id],
-  'Retry did not replace the old image'
-)
+check_tiles()
 press('-')
+
 for _ = 1, 12 do
   press('+')
 end
+local frame_cache = tile_cache
+local get_frame, requests = frame_cache.get, {}
+frame_cache.get = function(view, viewport, ready)
+  requests[#requests + 1] = viewport
+  return get_frame(view, viewport, ready)
+end
+vim.cmd('normal 10j5k')
+assert(#requests == 2, 'Counted motions rendered intermediate frames')
+assert(math.abs(requests[1].y - 10 * 2 * term.cell_height) < 1e-8, '10j did not move ten steps')
+assert(math.abs(requests[2].y - 5 * 2 * term.cell_height) < 1e-8, '5k did not move back five steps')
+vim.cmd('normal 5k10l5h')
+local horizontal_step = 4 * term.cell_width
+assert(math.abs(requests[3].y) < 1e-8, 'Counted scrolling did not return to the top')
+assert(math.abs(requests[4].x - 10 * horizontal_step) < 1e-8, '10l did not move ten steps')
+assert(math.abs(requests[5].x - 5 * horizontal_step) < 1e-8, '5h did not move back five steps')
+vim.cmd('normal 5h')
+frame_cache.get = get_frame
+settle(image)
 assert(
   image.path ~= source and image.transform_key == nil,
-  'Zoom did not produce a ready-to-display crop'
+  'Zoom did not produce ready-to-display tiles'
 )
 local preview_window = vim.api.nvim_get_current_win()
 vim.cmd('vsplit')
@@ -204,16 +352,91 @@ assert(not image.ignore_global_max_size, 'Reset lost the original size constrain
 assert(vim.deep_equal(image.rendered_geometry, initial), 'Reset did not restore the original view')
 assert(vim.deep_equal(vim.fn.readfile(source, 'b'), original), 'Source file changed')
 
--- At one source pixel per screen pixel, panning must upload each crop even without a resize.
+-- Unscaled pans move existing placements without uploading overlapping pixels again.
 image.ignore_global_max_size = true
 image:render({ width = 100, height = 38 })
 settle(image)
 press('j')
 assert(image.transform_key == nil, 'Expected a crop that does not need resizing')
-local previous_crop = displayed[image.internal_id]
+local previous_crop = vim.deepcopy(displayed)
+local first_command = #graphics + 1
 press('k')
-assert(displayed[image.internal_id] ~= previous_crop, 'Unscaled pan reused the old terminal upload')
+for index = first_command, #graphics do
+  assert(graphics[index].action ~= 't', 'Cached pan uploaded unchanged pixels again')
+end
+assert(not vim.deep_equal(displayed, previous_crop), 'Unscaled pan reused old placements')
 press('0')
+
+-- Font cells need not divide the tile size; within-cell offsets must preserve coverage.
+term.cell_width, term.cell_height = 9, 19
+press('+')
+press('j')
+press('l')
+check_tiles()
+local saved_tiles = current_view.plan.tiles
+local saved_paths = {}
+for _, tile in ipairs(saved_tiles) do
+  saved_paths[#saved_paths + 1] = tile.path
+end
+local tmux = require('image/utils').tmux
+local clear_start = #graphics + 1
+tmux.is_tmux = true
+tmux.get_pane_tty = function()
+  return '/dev/preview-test'
+end
+image:clear(true)
+tmux.is_tmux = false
+for index = clear_start, #graphics do
+  assert(graphics[index].tty == '/dev/preview-test', 'Tmux clear targeted the wrong terminal')
+end
+assert(next(displayed) == nil, 'Hiding the preview left tile placements')
+for _, tile in ipairs(saved_tiles) do
+  assert(tile.image_id == nil, 'Hiding retained uploads')
+end
+image:render()
+settle(image)
+check_tiles()
+for _, path in ipairs(saved_paths) do
+  assert(vim.fn.filereadable(path) == 1)
+end
+
+-- Leaving a preview frees its cache even when its buffer and window remain alive.
+local hidden_view = current_view
+local old_buffer = image.buffer
+local cached_tiles = {}
+for _, tile in pairs(hidden_view.cache.tiles) do
+  cached_tiles[#cached_tiles + 1] = { path = tile.path, id = tile.image_id }
+end
+vim.cmd('enew')
+assert(
+  vim.wait(1000, function()
+    return hidden_view.cache == nil
+  end, 5),
+  'Switching buffers retained the hidden preview cache'
+)
+for _, tile in ipairs(cached_tiles) do
+  assert(vim.fn.filereadable(tile.path) == 0, 'Hidden preview retained a tile file')
+  assert(not tile.id or not transmitted[tile.id], 'Hidden preview retained a terminal upload')
+end
+vim.cmd.buffer(old_buffer)
+image = assert(api.hijack_buffer(source))
+settle(image)
+assert(image.path == source, 'Returning to a preview used a deleted tile as its source')
+local parent_id = image.internal_id
+assert(transmitted[parent_id], 'Original preview did not upload')
+vim.cmd('enew')
+assert(
+  vim.wait(1000, function()
+    return transmitted[parent_id] == nil
+  end, 5),
+  'Leaving an untiled preview retained its terminal image data'
+)
+vim.cmd.buffer(old_buffer)
+image = assert(api.hijack_buffer(source))
+settle(image)
+press('+')
+press('0')
+term.cell_width, term.cell_height = 8, 16
 
 vim.cmd('enew')
 for _, key in ipairs({ '+', '-', 'h', 'j', 'k', 'l', '0' }) do
