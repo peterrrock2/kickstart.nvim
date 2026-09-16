@@ -1,5 +1,6 @@
 -- Run: nvim --clean --headless -i NONE -l <this-file> [path-to-image_preview.lua]
 vim.opt.runtimepath:append(vim.fn.stdpath('data') .. '/lazy/image.nvim')
+vim.opt.runtimepath:append(vim.fn.stdpath('config'))
 vim.o.columns, vim.o.lines = 100, 40
 local term = {
   screen_cols = 100,
@@ -13,27 +14,37 @@ package.loaded['image/utils/term'] = {
   get_size = function()
     return term
   end,
+  get_tty = function()
+    return '/dev/null'
+  end,
 }
 
--- Keep the real renderer and ImageMagick; replace only terminal output.
-local backend = { features = { crop = true } }
-function backend.setup(state)
-  backend.state = state
-end
-function backend.render(image)
-  backend.state.images[image.id] = image
-  image.is_rendered = true
-end
-function backend.clear(id, shallow)
-  local image = backend.state.images[id]
-  if image then
-    image.is_rendered = false
-    if not shallow then
-      backend.state.images[id] = nil
+-- Exercise the real renderer, Kitty upload cache, and ImageMagick without terminal output.
+local transmitted, displayed = {}, {}
+local graphics = {}
+local fail_display = false
+package.loaded['image/utils/tmux'] = { is_tmux = false }
+package.loaded['image/backends/kitty/helpers'] = {
+  write_graphics = function(payload, path)
+    graphics[#graphics + 1] = vim.deepcopy(payload)
+    if payload.action == 't' then
+      transmitted[payload.image_id] = path
+    elseif payload.action == 'd' and payload.image_id then
+      displayed[payload.image_id] = nil
+      if payload.display_delete == 'I' then
+        transmitted[payload.image_id] = nil
+      end
     end
-  end
-end
-package.loaded['image/backends/kitty'] = backend
+  end,
+  write_graphics_at = function(payload)
+    if fail_display then
+      fail_display = false
+      error('Simulated terminal display failure')
+    end
+    graphics[#graphics + 1] = vim.deepcopy(payload)
+    displayed[payload.image_id] = transmitted[payload.image_id]
+  end,
+}
 
 local helper = arg[1] or vim.fn.stdpath('config') .. '/lua/custom/image_preview.lua'
 dofile(helper).setup()
@@ -76,26 +87,69 @@ local function settle(image)
     end, 10),
     'Image did not render'
   )
+  assert(displayed[image.internal_id] == image.cropped_path, 'Kitty displayed an outdated image')
 end
 local image = assert(api.hijack_buffer(source))
 image:render()
 settle(image)
 local initial = vim.deepcopy(image.rendered_geometry)
-local function press(key)
+local function press(key, wait_for_render)
   local map = vim.fn.maparg(key, 'n', false, true)
   assert(map.buffer == 1 and type(map.callback) == 'function', 'Missing buffer mapping: ' .. key)
+  local previous_id, previous_path, first_command = image.internal_id, image.path, #graphics + 1
   map.callback()
-  settle(image)
+  assert(image.is_rendered, 'Preview was cleared while its replacement was being prepared')
+  if key ~= '0' then
+    assert(
+      image.transform_key == nil and not image.pending_transform_key,
+      'Prepared frame needed another resize'
+    )
+  end
+  if wait_for_render ~= false then
+    settle(image)
+  end
+  if image.path ~= previous_path then
+    assert(image.internal_id > previous_id, 'Replacement must use a new image id to draw on top')
+    local drawn = false
+    for index = first_command, #graphics do
+      local command = graphics[index]
+      if command.action == 'p' and command.image_id == image.internal_id then
+        drawn = true
+      elseif command.action == 'd' and command.image_id == previous_id then
+        assert(drawn, 'Old image was deleted before its replacement was drawn')
+        assert(command.display_delete == 'I', 'Retired image data was not released')
+      end
+    end
+    assert(drawn and not displayed[previous_id], 'Replacement left the old image displayed')
+    assert(not transmitted[previous_id], 'Retired image data accumulated in the terminal')
+  end
 end
 
 press('+')
 assert(image.rendered_geometry.width > initial.width, 'Zoom did not enlarge the preview')
 press('-')
 assert(math.abs(image.rendered_geometry.width - initial.width) <= 1, 'Zoom out failed')
+local previous_id, previous_frame = image.internal_id, displayed[image.internal_id]
+fail_display = true
+local ok, err = pcall(vim.fn.maparg('+', 'n', false, true).callback)
+assert(not ok and tostring(err):find('Simulated terminal display failure', 1, true))
+assert(image.internal_id == previous_id and image.is_rendered, 'Failed redraw lost the old image')
+assert(displayed[previous_id] == previous_frame, 'Failed redraw erased the old placement')
+assert(vim.tbl_count(transmitted) == 1, 'Failed redraw leaked an uploaded image')
+image:render()
+settle(image)
+assert(
+  image.internal_id > previous_id and not displayed[previous_id],
+  'Retry did not replace the old image'
+)
+press('-')
 for _ = 1, 12 do
   press('+')
 end
-assert(image.image_width < 400 and image.image_height < 300, 'Zoom did not crop the viewport')
+assert(
+  image.path ~= source and image.transform_key == nil,
+  'Zoom did not produce a ready-to-display crop'
+)
 local preview_window = vim.api.nvim_get_current_win()
 vim.cmd('vsplit')
 local other = assert(api.hijack_buffer(source))
@@ -105,10 +159,16 @@ assert(other.image_width == 800 and other.image_height == 600, 'Split inherited 
 assert(other.path == source, 'Split inherited the temporary source')
 vim.cmd('close')
 vim.api.nvim_set_current_win(preview_window)
+vim.wait(100, function()
+  return false
+end)
+image:render()
+settle(image)
 for _ = 1, 100 do
-  press('l')
-  press('j')
+  press('l', false)
+  press('j', false)
 end
+settle(image)
 local pixel = vim
   .system({ 'magick', image.path, '-format', '%[pixel:p{0,0}]', 'info:' }, { text = true })
   :wait()
@@ -116,6 +176,16 @@ assert(
   pixel.stdout:find('255,255,0', 1, true),
   'Scrolling did not reach the bottom-right corner: ' .. pixel.stdout
 )
+assert(vim.system({ 'magick', '-size', '800x600', 'xc:magenta', source }):wait().code == 0)
+press('j')
+pixel = vim
+  .system({ 'magick', image.path, '-format', '%[pixel:p{0,0}]', 'info:' }, { text = true })
+  :wait()
+assert(
+  pixel.stdout:find('255,0,255', 1, true),
+  'Source edit did not invalidate the cached viewport'
+)
+vim.fn.writefile(original, source, 'b')
 for _ = 1, 100 do
   press('h')
   press('k')
@@ -126,11 +196,24 @@ pixel = vim
 assert(pixel.stdout:find('255,0,0', 1, true), 'Scrolling back failed: ' .. pixel.stdout)
 local modified = vim.fn.getftime(source) + 2
 assert(vim.uv.fs_utime(source, modified, modified))
+local cached_crop = image.path
 press('0')
+assert(vim.fn.filereadable(cached_crop) == 0, 'Reset did not release the cached frame')
 assert(image.path == source and image.image_width == 800 and image.image_height == 600)
 assert(not image.ignore_global_max_size, 'Reset lost the original size constraints')
 assert(vim.deep_equal(image.rendered_geometry, initial), 'Reset did not restore the original view')
 assert(vim.deep_equal(vim.fn.readfile(source, 'b'), original), 'Source file changed')
+
+-- At one source pixel per screen pixel, panning must upload each crop even without a resize.
+image.ignore_global_max_size = true
+image:render({ width = 100, height = 38 })
+settle(image)
+press('j')
+assert(image.transform_key == nil, 'Expected a crop that does not need resizing')
+local previous_crop = displayed[image.internal_id]
+press('k')
+assert(displayed[image.internal_id] ~= previous_crop, 'Unscaled pan reused the old terminal upload')
+press('0')
 
 vim.cmd('enew')
 for _, key in ipairs({ '+', '-', 'h', 'j', 'k', 'l', '0' }) do
@@ -210,4 +293,43 @@ press('j')
 press('l')
 press('0')
 assert(image.path == vector_pdf, 'Vector PDF reset failed')
-print('PASS: preview controls, source preservation, buffer/split isolation, and PDF vector detail')
+
+for _, name in ipairs({ 'neo-tree.nvim', 'nui.nvim', 'plenary.nvim', 'nvim-web-devicons' }) do
+  vim.opt.runtimepath:append(vim.fn.stdpath('data') .. '/lazy/' .. name)
+end
+local tree_options = dofile(vim.fn.stdpath('config') .. '/lua/kickstart/plugins/neo-tree.lua').opts
+tree_options.log_to_file = false
+require('neo-tree').setup(tree_options)
+local tree_config = require('neo-tree').ensure_config()
+api.setup({
+  processor = 'magick_cli',
+  integrations = integrations,
+  hijack_file_patterns = { '*.png' },
+})
+vim.cmd('enew')
+local original_buffer = vim.api.nvim_get_current_buf()
+vim.cmd('vsplit')
+local tree_window = vim.api.nvim_get_current_win()
+local preview = require('neo-tree.sources.common.preview'):new({
+  winid = tree_window,
+  current_position = 'right',
+  config = tree_config.filesystem.window.mappings.P.config,
+})
+local source_buffer = vim.fn.bufadd(source)
+preview:preview(source_buffer)
+assert(
+  vim.api.nvim_win_get_buf(preview.winid) == source_buffer,
+  'Neo-tree replaced the image buffer with an empty preview buffer'
+)
+image = assert(api.get_images({ window = preview.winid, buffer = source_buffer })[1])
+settle(image)
+assert(vim.api.nvim_get_current_win() == tree_window, 'Preview stole focus from the tree')
+local preview_window = preview.winid
+preview:revert()
+assert(
+  vim.api.nvim_win_get_buf(preview_window) == original_buffer,
+  'Preview did not restore the buffer'
+)
+print(
+  'PASS: preview controls, rapid scrolling, Kitty uploads, Neo-tree preview, and PDF vector detail'
+)
