@@ -20,7 +20,7 @@ return {
   },
   init = function()
     -- Drop 'terminal' so terminal buffers are not saved/restored with the session.
-    vim.o.sessionoptions = 'blank,buffers,curdir,folds,help,tabpages,winsize,winpos,localoptions'
+    vim.o.sessionoptions = 'blank,buffers,curdir,folds,globals,help,tabpages,winsize,winpos,localoptions'
   end,
   opts = {
     log_level = 'error',
@@ -31,6 +31,11 @@ return {
     cwd_change_handling = true,
     use_git_branch_name = true,
     pre_save_cmds = { prune_missing_buffers },
+    pre_restore_cmds = {
+      function()
+        vim.g.BufferlinePositions = nil
+      end,
+    },
     post_restore_cmds = { prune_missing_buffers },
 
     -- Show restore errors but keep auto-save enabled, so a stale session entry
