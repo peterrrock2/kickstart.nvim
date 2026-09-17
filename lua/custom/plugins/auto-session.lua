@@ -12,6 +12,17 @@ local function prune_missing_buffers()
   end
 end
 
+local function restore_python_folding()
+  -- Session options are restored after ftplugins and can override Python's fold method.
+  for _, window in ipairs(vim.api.nvim_list_wins()) do
+    local buffer = vim.api.nvim_win_get_buf(window)
+    if vim.bo[buffer].filetype == 'python' and vim.wo[window].foldmethod ~= 'indent' then
+      vim.wo[window].foldmethod = 'indent'
+      vim.wo[window].foldlevel = 99
+    end
+  end
+end
+
 return {
   'rmagatti/auto-session',
   lazy = false,
@@ -20,7 +31,8 @@ return {
   },
   init = function()
     -- Drop 'terminal' so terminal buffers are not saved/restored with the session.
-    vim.o.sessionoptions = 'blank,buffers,curdir,folds,globals,help,tabpages,winsize,winpos,localoptions'
+    vim.o.sessionoptions =
+      'blank,buffers,curdir,folds,globals,help,tabpages,winsize,winpos,localoptions'
   end,
   opts = {
     log_level = 'error',
@@ -36,7 +48,7 @@ return {
         vim.g.BufferlinePositions = nil
       end,
     },
-    post_restore_cmds = { prune_missing_buffers },
+    post_restore_cmds = { prune_missing_buffers, restore_python_folding },
 
     -- Show restore errors but keep auto-save enabled, so a stale session entry
     -- (e.g. a deleted file image.nvim chokes on) gets overwritten on exit
