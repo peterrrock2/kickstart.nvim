@@ -3,6 +3,22 @@ local cache = require('custom.image_preview_cache')
 local views = setmetatable({}, { __mode = 'k' })
 local tiles = require('custom.image_preview_tiles')
 
+local function validate_terminal_detection()
+  local utils = require('image/utils')
+  for _, entry in ipairs({ { utils.term, 'get_tty' }, { utils.tmux, 'get_pane_tty' } }) do
+    local module, name = entry[1], entry[2]
+    local detect = module[name]
+    module[name] = function()
+      local path = detect()
+      local stat = path and path:sub(1, 1) == '/' and vim.uv.fs_stat(path)
+      -- Failed `tty`/tmux commands return text that image.nvim would open as a filename.
+      if stat and stat.type == 'char' then
+        return path
+      end
+    end
+  end
+end
+
 local function install_pdf_renderer()
   local processor = require('image/processors/magick_cli')
   local transform = processor.transform
@@ -260,6 +276,7 @@ local function change_view(action)
 end
 
 function M.setup()
+  validate_terminal_detection()
   install_pdf_renderer()
   install_tile_renderer()
   local group = vim.api.nvim_create_augroup('ImagePreviewKeys', { clear = true })

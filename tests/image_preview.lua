@@ -547,6 +547,20 @@ assert(
 image = assert(api.get_images({ window = preview.winid, buffer = source_buffer })[1])
 settle(image)
 assert(vim.api.nvim_get_current_win() == tree_window, 'Preview stole focus from the tree')
+local second_source = vim.fn.tempname() .. '.png'
+assert(vim.system({ 'magick', '-size', '320x240', 'xc:purple', second_source }):wait().code == 0)
+local second_buffer = vim.fn.bufadd(second_source)
+for _, buffer in ipairs({ second_buffer, source_buffer, second_buffer }) do
+  preview:preview(buffer)
+  image = assert(api.get_images({ window = preview.winid, buffer = buffer })[1])
+  settle(image)
+  vim.wait(100)
+  assert(
+    displayed[image.internal_id .. ':' .. image.internal_id],
+    'Switching previews lost the current image'
+  )
+  assert(vim.api.nvim_get_current_win() == tree_window, 'Switching previews stole focus')
+end
 local preview_window = preview.winid
 preview:revert()
 assert(
