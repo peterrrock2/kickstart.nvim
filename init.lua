@@ -356,7 +356,7 @@ vim.keymap.set('x', 'gr', '<cmd>diffget<CR>', { desc = 'DiffGet on the selected 
 vim.keymap.set('x', 'gs', '<cmd>diffput<CR>', { desc = 'DiffPut on the selected text', silent = true })
 
 -- Markdown
-vim.keymap.set('n', '<leader>mp', '<cmd>PeekToggle<CR>', { desc = 'Markdown Preview (peek)' })
+vim.keymap.set('n', '<leader>mp', '<cmd>RenderMarkdown buf_toggle<CR>', { desc = 'Markdown Preview (inline)' })
 
 --
 -- [[ Basic Autocommands ]]
@@ -430,6 +430,7 @@ require('lazy').setup({
 
   { import = 'custom.plugins' },
 }, {
+  change_detection = { notify = false },
   ui = {
     -- If you are using a Nerd Font: set icons to an empty table which will use the
     -- default lazy.nvim defined Nerd Font icons, otherwise define a unicode icons table

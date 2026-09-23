@@ -4,7 +4,7 @@ return {
   build = 'deno task --quiet build:fast',
   config = function()
     local peek = require 'peek'
-    peek.setup { app = 'browser' }
+    peek.setup { app = '/usr/bin/brave' }
 
     vim.api.nvim_create_user_command('PeekOpen', peek.open, {})
     vim.api.nvim_create_user_command('PeekClose', peek.close, {})
