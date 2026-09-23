@@ -166,7 +166,9 @@ local function check_tiles()
     rectangles[#rectangles + 1] = { x = x, y = y, right = x + width, bottom = y + height }
     area = area + width * height
   end
-  assert(area == (right - left) * (bottom - top), 'Tile placements leave gaps')
+  if not current_view.document then
+    assert(area == (right - left) * (bottom - top), 'Tile placements leave gaps')
+  end
 end
 
 local function press(key, wait_for_render)
@@ -187,7 +189,7 @@ local function press(key, wait_for_render)
     check_tiles()
   end
   local drawn = 0
-  local expected = key == '0' and 1 or #current_view.placements
+  local expected = key == '0' and not current_view.plan and 1 or #current_view.placements
   for index = first_command, #graphics do
     local command = graphics[index]
     if command.action == 't' then
@@ -444,11 +446,37 @@ for _, key in ipairs({ '+', '-', 'h', 'j', 'k', 'l', '0' }) do
 end
 
 local pdf = vim.fn.tempname() .. '.pdf'
-assert(vim.system({ 'magick', source, pdf }):wait().code == 0)
+assert(vim.system({ 'magick', source, '-size', '600x800', 'xc:cyan', pdf }):wait().code == 0)
+local dimensions = require('image/processors/magick_cli').get_dimensions(pdf)
+assert(
+  dimensions.width == 800 and dimensions.height == 600,
+  'PDF dimensions combine multiple pages'
+)
 vim.api.nvim_buf_set_name(0, pdf)
 image = assert(api.hijack_buffer(pdf))
 image:render()
 settle(image)
+assert(
+  vim.wait(10000, function()
+    return current_view and current_view.source == pdf and current_view.plan
+  end, 10),
+  'Multi-page PDF did not start continuous rendering'
+)
+settle(image)
+local boundary_scroll = math.ceil(
+  (current_view.document.pages[2].y * current_view.scale - current_view.plan.height / 2)
+    / (2 * term.cell_height)
+)
+vim.cmd.normal({ boundary_scroll .. 'j' })
+settle(image)
+local visible_pages = {}
+for _, tile in ipairs(current_view.plan.tiles) do
+  visible_pages[tile.page] = true
+end
+assert(visible_pages[1] and visible_pages[2], 'Scrolling cannot show two pages together')
+vim.cmd.normal({ '100k' })
+settle(image)
+assert(current_view.y == 0, 'Scrolling did not return to the document start')
 press('+')
 for _ = 1, 12 do
   press('+')
@@ -457,7 +485,41 @@ assert(image.path ~= pdf and image.source_format == 'png', 'PDF zoom did not cro
 press('j')
 press('l')
 press('0')
-assert(image.path == pdf, 'PDF reset failed: ' .. image.path .. ' expected ' .. pdf)
+assert(current_view.source == pdf and current_view.zoom == 1, 'PDF reset failed')
+
+vim.cmd.normal({ ']p' })
+settle(image)
+assert(current_view.page == 2, 'Next page did not select page two')
+local page_two_tile
+for _, tile in ipairs(current_view.plan.tiles) do
+  if tile.page == 2 then
+    page_two_tile = tile.path
+    break
+  end
+end
+assert(page_two_tile, 'Next page is not visible')
+pixel = vim
+  .system({ 'magick', page_two_tile, '-format', '%[pixel:p{10,10}]', 'info:' }, { text = true })
+  :wait()
+assert(
+  pixel.stdout:find('0,255,255', 1, true),
+  'Next page reused page-one pixels: ' .. pixel.stdout
+)
+press('+')
+press('j')
+press('0')
+assert(current_view.page == 2 and current_view.zoom == 1, 'Reset left the selected PDF page')
+vim.cmd.normal({ '10]p' })
+settle(image)
+assert(current_view.page == 2, 'Page navigation exceeded the document')
+vim.cmd.normal({ '[p' })
+settle(image)
+assert(current_view.page == 1, 'Previous page did not return to page one')
+pixel = vim
+  .system({ 'magick', image.path, '-format', '%[pixel:p{0,0}]', 'info:' }, { text = true })
+  :wait()
+assert(pixel.stdout:find('255,0,0', 1, true), 'Previous page reused page-two pixels')
+press('0')
 
 -- Subpixel vector stripes disappear if the PDF is rasterized at 72 DPI before enlargement.
 local postscript = vim.fn.tempname() .. '.ps'
@@ -568,5 +630,5 @@ assert(
   'Preview did not restore the buffer'
 )
 print(
-  'PASS: preview controls, rapid scrolling, Kitty uploads, Neo-tree preview, and PDF vector detail'
+  'PASS: preview controls, continuous PDFs, Kitty uploads, Neo-tree preview, and PDF vector detail'
 )

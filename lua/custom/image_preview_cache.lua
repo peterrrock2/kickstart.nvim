@@ -1,53 +1,71 @@
 local M = {}
 local renderer = require('custom.image_preview_tiles')
+local pdf = require('custom.image_preview_pdf')
 local TILE_SIZE = 256
 -- Estimated RGBA pixels plus PNG files; visible tiles stay pinned even above this target.
 local CACHE_BYTES = 32 * 1024 * 1024
 
-function M.build_pdf_command(path, width, height, crop, output)
-  local command = {
-    'pdftoppm',
-    '-f',
-    '1',
-    '-singlefile',
-    '-png',
-    '-scale-to-x',
-    tostring(width),
-    '-scale-to-y',
-    tostring(height),
-  }
-  if crop then
-    vim.list_extend(command, {
-      '-x',
-      tostring(crop.x),
-      '-y',
-      tostring(crop.y),
-      '-W',
-      tostring(crop.width),
-      '-H',
-      tostring(crop.height),
-    })
+local function build_regions(view, viewport)
+  if not view.document then
+    return { { x = 0, y = 0, width = viewport.scaled_width, height = viewport.scaled_height } }
   end
-  vim.list_extend(command, { path, (output:gsub('%.png$', '')) })
-  return command
+  local scale_x = viewport.scaled_width / view.document.width
+  local scale_y = viewport.scaled_height / view.document.height
+  local regions = {}
+  for _, page in ipairs(view.document.pages) do
+    local x, y = math.floor(page.x * scale_x + 0.5), math.floor(page.y * scale_y + 0.5)
+    regions[#regions + 1] = {
+      page = page.number,
+      x = x,
+      y = y,
+      width = math.max(1, math.floor((page.x + page.width) * scale_x + 0.5) - x),
+      height = math.max(1, math.floor((page.y + page.height) * scale_y + 0.5) - y),
+    }
+  end
+  return regions
 end
 
-local function build_tile(view, viewport, column, row)
+local function build_tile(view, viewport, region, column, row)
   local x, y = column * TILE_SIZE, row * TILE_SIZE
   return {
-    key = viewport.signature .. ':' .. column .. ':' .. row,
+    key = viewport.signature .. ':' .. (region.page or 1) .. ':' .. column .. ':' .. row,
     source_key = viewport.source_key,
     source = view.source,
     format = view.format,
+    page = region.page,
     source_width = view.width,
     source_height = view.height,
-    scaled_width = viewport.scaled_width,
-    scaled_height = viewport.scaled_height,
-    x = x,
-    y = y,
-    width = math.min(TILE_SIZE, viewport.scaled_width - x),
-    height = math.min(TILE_SIZE, viewport.scaled_height - y),
+    scaled_width = region.width,
+    scaled_height = region.height,
+    crop_x = x,
+    crop_y = y,
+    x = region.x + x,
+    y = region.y + y,
+    width = math.min(TILE_SIZE, region.width - x),
+    height = math.min(TILE_SIZE, region.height - y),
   }
+end
+
+local function build_plan_tiles(view, plan)
+  local tiles = {}
+  for _, region in ipairs(build_regions(view, plan)) do
+    local left = math.max(0, math.floor((plan.x - region.x) / TILE_SIZE) - 1)
+    local top = math.max(0, math.floor((plan.y - region.y) / TILE_SIZE) - 1)
+    local right = math.min(
+      math.ceil(region.width / TILE_SIZE) - 1,
+      math.floor((plan.x + plan.width - 1 - region.x) / TILE_SIZE) + 1
+    )
+    local bottom = math.min(
+      math.ceil(region.height / TILE_SIZE) - 1,
+      math.floor((plan.y + plan.height - 1 - region.y) / TILE_SIZE) + 1
+    )
+    for row = top, bottom do
+      for column = left, right do
+        tiles[#tiles + 1] = build_tile(view, plan, region, column, row)
+      end
+    end
+  end
+  return tiles
 end
 
 local function build_raster_command(tiles)
@@ -84,12 +102,13 @@ local function build_command(tile)
   if tile.format ~= 'pdf' then
     return build_raster_command({ tile })
   end
-  return M.build_pdf_command(
+  return pdf.build_command(
     tile.source,
     tile.scaled_width,
     tile.scaled_height,
-    { x = tile.x, y = tile.y, width = tile.width, height = tile.height },
-    tile.path
+    { x = tile.crop_x, y = tile.crop_y, width = tile.width, height = tile.height },
+    tile.path,
+    tile.page
   )
 end
 
@@ -296,25 +315,23 @@ function M.get(view, viewport, ready)
     source_key = source_key,
   })
   local request = { plan = plan, missing = {}, keys = {}, ready = ready }
-  local left, top = math.floor(plan.x / TILE_SIZE), math.floor(plan.y / TILE_SIZE)
-  local right = math.floor((plan.x + plan.width - 1) / TILE_SIZE)
-  local bottom = math.floor((plan.y + plan.height - 1) / TILE_SIZE)
-
-  for row = math.max(0, top - 1), math.min(math.ceil(plan.scaled_height / TILE_SIZE) - 1, bottom + 1) do
-    for column = math.max(0, left - 1), math.min(math.ceil(plan.scaled_width / TILE_SIZE) - 1, right + 1) do
-      local tile = build_tile(view, plan, column, row)
-      if column >= left and column <= right and row >= top and row <= bottom then
-        tile = cache.tiles[tile.key] or tile
-        if not tile.path then
-          request.missing[#request.missing + 1] = tile
-        end
-        cache.clock = cache.clock + 1
-        tile.used = cache.clock
-        request.keys[tile.key] = true
-        plan.tiles[#plan.tiles + 1] = tile
-      else
-        plan.neighbours[#plan.neighbours + 1] = tile
+  for _, tile in ipairs(build_plan_tiles(view, plan)) do
+    if
+      tile.x < plan.x + plan.width
+      and tile.x + tile.width > plan.x
+      and tile.y < plan.y + plan.height
+      and tile.y + tile.height > plan.y
+    then
+      tile = cache.tiles[tile.key] or tile
+      if not tile.path then
+        request.missing[#request.missing + 1] = tile
       end
+      cache.clock = cache.clock + 1
+      tile.used = cache.clock
+      request.keys[tile.key] = true
+      plan.tiles[#plan.tiles + 1] = tile
+    else
+      plan.neighbours[#plan.neighbours + 1] = tile
     end
   end
   if #request.missing == 0 then

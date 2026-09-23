@@ -2,6 +2,8 @@ local M = {}
 local cache = require('custom.image_preview_cache')
 local views = setmetatable({}, { __mode = 'k' })
 local tiles = require('custom.image_preview_tiles')
+local pdf = require('custom.image_preview_pdf')
+local change_view
 
 local function validate_terminal_detection()
   local utils = require('image/utils')
@@ -19,28 +21,6 @@ local function validate_terminal_detection()
   end
 end
 
-local function install_pdf_renderer()
-  local processor = require('image/processors/magick_cli')
-  local transform = processor.transform
-  processor.transform = function(path, request, output, callback)
-    if request.source_format ~= 'pdf' then
-      return transform(path, request, output, callback)
-    end
-
-    -- Rasterize vectors at the requested pixel size, including the initial view and reset.
-    local command = cache.build_pdf_command(
-      path,
-      request.target_width,
-      request.target_height,
-      request.crop,
-      output
-    )
-    vim.system(command, { text = true }, function(result)
-      callback({ ok = result.code == 0, path = output, error = result.stderr })
-    end)
-  end
-end
-
 local function get_view(image, cell_width)
   local view = views[image]
   local source = view and view.source or image.original_path
@@ -55,25 +35,36 @@ local function get_view(image, cell_width)
   end
 
   local processor = image.global_state.processor
-  local dimensions = processor.get_dimensions(source)
+  local format = processor.get_format(source)
+  local document = format == 'pdf' and pdf.read_document(source) or nil
+  local dimensions = document and document.pages[1] or processor.get_dimensions(source)
+  document = document and #document.pages > 1 and document or nil
   if view then
     view.scale = view.scale * view.width / dimensions.width
     view.width, view.height = dimensions.width, dimensions.height
-    view.format = processor.get_format(source)
+    view.format, view.document = format, document
+    view.page = document and math.min(view.page or 1, #document.pages) or nil
     view.modified = modified
     return view, true
   end
 
+  local scale = image.rendered_geometry.width * cell_width / dimensions.width
+  if document then
+    local info = vim.fn.getwininfo(image.window)[1]
+    scale = math.max(1, info.width - info.textoff) * cell_width / document.width
+  end
   view = {
     source = source,
     width = dimensions.width,
     height = dimensions.height,
-    format = processor.get_format(source),
+    format = format,
+    document = document,
+    anchor = image.cropped_path,
     geometry = vim.deepcopy(image.geometry),
     ignore_max = image.ignore_global_max_size,
     offset = image.render_offset_top,
     modified = modified,
-    scale = image.rendered_geometry.width * cell_width / dimensions.width,
+    scale = scale,
     zoom = 1,
     x = 0,
     y = 0,
@@ -139,7 +130,21 @@ local function install_tile_renderer()
     end
 
     if not view or not view.resetting then
-      return render(image, ...)
+      local result = render(image, ...)
+      if not view and image.is_rendered and image.source_format == 'pdf' and image.window then
+        vim.schedule(function()
+          if
+            not views[image]
+            and is_preview_visible(image)
+            and vim.bo[image.buffer].filetype == 'image_nvim'
+          then
+            vim.api.nvim_win_call(image.window, function()
+              change_view({ refresh = true })
+            end)
+          end
+        end)
+      end
+      return result
     end
     local ok, err = pcall(render, image, ...)
     if not ok then
@@ -171,7 +176,7 @@ local function install_tile_renderer()
   end
 end
 
-local function change_view(action)
+change_view = function(action)
   local window = vim.api.nvim_get_current_win()
   local image =
     require('image').get_images({ window = window, buffer = vim.api.nvim_get_current_buf() })[1]
@@ -183,6 +188,27 @@ local function change_view(action)
   local view, source_changed = get_view(image, term.cell_width)
   if not view then
     return
+  end
+  local resetting = action == 'reset'
+  local info = vim.fn.getwininfo(window)[1]
+  if type(action) == 'table' and action.refresh and not view.document then
+    return
+  end
+  if type(action) == 'table' and action.page then
+    if not view.document then
+      return
+    end
+    local page =
+      math.max(1, math.min(#view.document.pages, (view.page or 1) + action.page * vim.v.count1))
+    view.y = view.document.pages[page].y
+    action = { refresh = true }
+    vim.api.nvim_echo({ { ('PDF page %d / %d'):format(page, #view.document.pages) } }, false, {})
+  end
+  if action == 'reset' and view.document then
+    cache.cancel(view)
+    view.scale = math.max(1, info.width - info.textoff) * term.cell_width / view.document.width
+    action = { zoom = 1 / view.zoom }
+    view.x, view.y = 0, view.document.pages[view.page or 1].y
   end
   if action == 'reset' then
     cache.cancel(view)
@@ -199,23 +225,29 @@ local function change_view(action)
   local count = vim.v.count1
   local zoom = math.max(0.125, math.min(16, view.zoom * (action.zoom or 1)))
   local scale = view.scale * zoom
-  local info = vim.fn.getwininfo(window)[1]
-  local scaled_width = math.max(1, math.floor(view.width * scale + 0.5))
-  local scaled_height = math.max(1, math.floor(view.height * scale + 0.5))
+  local dimensions = view.document or view
+  local scaled_width = math.max(1, math.floor(dimensions.width * scale + 0.5))
+  local scaled_height = math.max(1, math.floor(dimensions.height * scale + 0.5))
   local width = math.min(scaled_width, math.max(1, info.width - info.textoff) * term.cell_width)
   local height = math.min(scaled_height, math.max(1, info.height - 1) * term.cell_height)
+  local source_x, source_y = view.x, view.y
+  if view.document and view.plan and action.zoom and not resetting then
+    local previous_scale = view.scale * view.zoom
+    source_x = source_x + view.plan.width / (2 * previous_scale) - width / (2 * scale)
+    source_y = source_y + view.plan.height / (2 * previous_scale) - height / (2 * scale)
+  end
   local x = math.max(
     0,
     math.min(
       scaled_width - width,
-      math.floor(view.x * scale + 0.5) + count * (action.x or 0) * term.cell_width
+      math.floor(source_x * scale + 0.5) + count * (action.x or 0) * term.cell_width
     )
   )
   local y = math.max(
     0,
     math.min(
       scaled_height - height,
-      math.floor(view.y * scale + 0.5) + count * (action.y or 0) * term.cell_height
+      math.floor(source_y * scale + 0.5) + count * (action.y or 0) * term.cell_height
     )
   )
   local plan = view.plan
@@ -228,6 +260,7 @@ local function change_view(action)
     )
   if
     not action.zoom
+    and not action.refresh
     and not source_changed
     and same_size
     and x == math.floor(view.x * scale + 0.5)
@@ -243,6 +276,7 @@ local function change_view(action)
   end
   local columns, rows = math.ceil(width / term.cell_width), math.ceil(height / term.cell_height)
   view.zoom, view.x, view.y = zoom, x / scale, y / scale
+  view.page = view.document and pdf.page_at(view.document, (y + height / 2) / scale) or nil
   cache.get(view, {
     width = width,
     height = height,
@@ -258,7 +292,7 @@ local function change_view(action)
     -- Let image.nvim determine visibility and bounds; the backend draws the actual tiles.
     replace_source(
       image,
-      plan.tiles[1].path,
+      plan.tiles[1] and plan.tiles[1].path or view.anchor,
       'png',
       columns * term.cell_width,
       rows * term.cell_height
@@ -277,7 +311,7 @@ end
 
 function M.setup()
   validate_terminal_detection()
-  install_pdf_renderer()
+  pdf.setup()
   install_tile_renderer()
   local group = vim.api.nvim_create_augroup('ImagePreviewKeys', { clear = true })
   vim.api.nvim_create_autocmd({ 'WinClosed', 'BufWipeout', 'VimLeavePre' }, {
@@ -304,8 +338,12 @@ function M.setup()
         h = { { x = -4 }, 'Scroll left' },
         j = { { y = 2 }, 'Scroll down' },
         k = { { y = -2 }, 'Scroll up' },
+        ['<ScrollWheelDown>'] = { { y = 2 }, 'Scroll down' },
+        ['<ScrollWheelUp>'] = { { y = -2 }, 'Scroll up' },
         l = { { x = 4 }, 'Scroll right' },
         ['0'] = { 'reset', 'Reset preview' },
+        [']p'] = { { page = 1 }, 'Next PDF page' },
+        ['[p'] = { { page = -1 }, 'Previous PDF page' },
       }
       for key, binding in pairs(bindings) do
         vim.keymap.set('n', key, function()
