@@ -101,6 +101,50 @@ assert(table.concat(wrapped, ' ') == table.concat(reference_paragraph, ' '), 'Re
 vim.cmd 'Reflow'
 assert(vim.deep_equal(wrapped, vim.api.nvim_buf_get_lines(0, 0, -1, false)), 'Multiline reference reflow is not idempotent')
 
+local state_comparisons = {
+  'State comparisons follow the same principle as the modern tables: counts for smaller units must',
+  "sum to their state's counts. This applies to all source count columns and derived study counts for",
+  '1980 counties and every supported level below the state in 1990. Processing loads the national',
+  'NHGIS state tables before reading the smaller areas, comparing their total, non-Hispanic White,',
+  'and non-Hispanic Black counts with',
+  '[Census Working Paper 56](https://www.census.gov/library/working-papers/2002/demo/POP-twps0056.html),',
+  'Table E-3 for 1980 and Table E-1 for 1990. As with the modern references, these are separate',
+  'publications of Census counts rather than independent counts of residents.',
+  'The state tables are then reused for these comparisons and saved as the national state outputs,',
+  'without reading their archives again.',
+}
+for _, language in ipairs { 'markdown', 'python', 'rust' } do
+  local prefix = ({ markdown = '', python = '# ', rust = '/// ' })[language]
+  local input = vim.tbl_map(function(line)
+    return prefix .. line
+  end, state_comparisons)
+  local output = reflow(language, input, 'Reflow')
+  local paragraphs = {}
+  for _, line in ipairs(output) do
+    assert(line:sub(1, #prefix) == prefix, 'Reflow changed a comment prefix')
+    local text = line:sub(#prefix + 1)
+    assert(not text:match '^%s', 'A year in prose introduced numbered-list indentation')
+    if text ~= state_comparisons[6] then
+      within_width({ line }, 98)
+    end
+    paragraphs[#paragraphs + 1] = text
+  end
+  assert(table.concat(paragraphs, ' ') == table.concat(state_comparisons, ' '), 'Year-containing prose changed')
+  contains(output, prefix .. state_comparisons[6])
+  vim.cmd 'Reflow'
+  assert(vim.deep_equal(output, vim.api.nvim_buf_get_lines(0, 0, -1, false)), 'Year-containing prose is not idempotent')
+end
+
+for _, marker in ipairs { '1. ', '1) ' } do
+  wrapped = reflow('markdown', { marker .. prose })
+  assert(wrapped[1]:sub(1, #marker) == marker, 'Ordered-list marker changed')
+  assert(#wrapped > 1, 'Ordered list was not wrapped')
+  for row = 2, #wrapped do
+    assert(wrapped[row]:match '^   %S', 'Ordered-list continuation lost its indentation')
+  end
+  within_width(wrapped, 45)
+end
+
 for _, case in ipairs {
   { 'markdown', '', '' },
   { 'markdown', '- ', '  ' },

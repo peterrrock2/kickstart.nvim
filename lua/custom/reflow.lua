@@ -94,9 +94,10 @@ end
 
 local function unpack_block_comment(content, block)
   local indent, opener = content[1]:match '^(%s*)(/%*+!?)'
+  local closing = content[#content]:match '^%s*%*/%s*$' or indent .. ' */'
   content[1] = content[1]:sub(#indent + #opener + 1):gsub('^ ', '')
   content[#content] = content[#content]:gsub('%s*%*/%s*$', '')
-  local prefix = content[2] and content[2]:match '^%s*%* ?' or indent .. ' '
+  local prefix = content[2] and (content[2]:match '^%s*%* ?' or content[2]:match '^%s*') or indent .. ' '
   for i = 2, #content do
     if content[i]:match '^%s*$' or (prefix:find('*', 1, true) and vim.trim(content[i]) == '*') then
       content[i] = ''
@@ -117,7 +118,7 @@ local function unpack_block_comment(content, block)
     table.remove(content, 1)
     block.content_offset = 1
   end
-  return content, prefix, { indent .. opener }, { indent .. ' */' }
+  return content, prefix, { indent .. opener }, { closing }
 end
 
 local function unpack_block(lines, block)
@@ -156,25 +157,31 @@ local function can_reflow(lines, first, last, field)
 end
 
 local atomic_nodes = {
-  inline_link = true,
-  full_reference_link = true,
-  collapsed_reference_link = true,
-  shortcut_link = true,
-  image = true,
-  code_span = true,
-  latex_block = true,
+  inline_link = 'link',
+  full_reference_link = 'link',
+  collapsed_reference_link = 'link',
+  shortcut_link = 'link',
+  image = 'link',
+  code_span = 'verbatim',
+  latex_block = 'verbatim',
+  html_tag = 'verbatim',
+  uri_autolink = 'verbatim',
+  email_autolink = 'verbatim',
 }
 
 local function protect_inline_units(source, label)
   local pieces, replacements, position, codepoint = {}, {}, 1, 0xE000
   local _, quote_depth = (source:match '^[ \t>]*'):gsub('>', '')
-  local function protect(first, last, join_link_lines)
+  local preserve = false
+  local function protect(first, last, policy)
     local text = source:sub(first + 1, last)
-    if join_link_lines then
+    if policy == 'link' then
       for _ = 1, quote_depth do
         text = text:gsub('\n[ \t]*>[ \t]?', '\n')
       end
       text = text:gsub('[ \t]*\n[ \t]*', ' ')
+    elseif text:find('\n', 1, true) then
+      preserve = true
     end
     local marker
     repeat
@@ -182,7 +189,8 @@ local function protect_inline_units(source, label)
       codepoint = codepoint + 1
     until not source:find(marker, 1, true)
     -- A same-width, unbreakable placeholder lets gq keep its native list/quote handling.
-    local placeholder = marker:rep(math.max(1, vim.fn.strdisplaywidth(text:gsub('\n', ' '))))
+    local columns = vim.fn.strdisplaywidth((text:gsub('\n', ' ')))
+    local placeholder = marker:rep(math.max(1, math.ceil(columns / vim.fn.strdisplaywidth(marker))))
     pieces[#pieces + 1] = source:sub(position, first)
     pieces[#pieces + 1] = placeholder
     replacements[#replacements + 1] = { placeholder, text }
@@ -196,7 +204,7 @@ local function protect_inline_units(source, label)
       local _, _, first = node:start()
       local _, _, last = node:end_()
       if first >= position - 1 then
-        protect(first, last, node:type() ~= 'code_span' and node:type() ~= 'latex_block')
+        protect(first, last, atomic_nodes[node:type()])
       end
       return
     end
@@ -206,24 +214,50 @@ local function protect_inline_units(source, label)
   end
   visit(parse(source, 'markdown_inline'))
   pieces[#pieces + 1] = source:sub(position)
-  return table.concat(pieces), replacements
+  local masked = table.concat(pieces)
+  -- Unparsed brackets can be nested links that the inline parser did not recognize.
+  preserve = preserve or masked:gsub('\\.', ''):find '[%[%]]' ~= nil
+  return masked, replacements, preserve
+end
+
+local function markdown_shape(source)
+  local function shape(node)
+    if node:type() == 'inline' or node:type() == 'block_continuation' then
+      return ''
+    end
+
+    local children = { node:type() }
+    for child in node:iter_children() do
+      if child:named() then
+        children[#children + 1] = shape(child)
+      end
+    end
+    return '(' .. table.concat(children) .. ')'
+  end
+  return shape(parse(source .. '\n', 'markdown'))
 end
 
 local function wrap_paragraph(lines, width, field, scratch, summary_prefix)
+  local original = table.concat(lines, '\n')
   if summary_prefix then
     lines[1] = summary_prefix .. lines[1]
   end
-  local label, description = lines[1]:match '^(%s*.-:)%s+(.+)$'
+  local label, description = lines[1]:match '^(%s*.-:)%s*(.*)$'
   local hanging = field and label
-  if hanging then
+  if hanging and description ~= '' then
     local indent = lines[1]:match '^%s*' .. '    '
     lines[1] = label
     table.insert(lines, 2, indent .. description)
   end
-  local source, replacements = protect_inline_units(table.concat(lines, '\n'), hanging)
+  local source, replacements, preserve = protect_inline_units(table.concat(lines, '\n'), hanging)
+  if preserve then
+    return vim.split(original, '\n', { plain = true })
+  end
+
   vim.api.nvim_buf_set_lines(scratch, 0, -1, false, vim.split(source, '\n', { plain = true }))
   vim.bo[scratch].textwidth = width
-  vim.bo[scratch].formatoptions = hanging and 'tq2' or 'tqn'
+  local numbered = lines[1]:match '^[%s>]*%d+[.)]%s'
+  vim.bo[scratch].formatoptions = hanging and 'tq2' or (numbered and 'tqn' or 'tq')
   vim.api.nvim_buf_call(scratch, function()
     vim.cmd 'silent keepjumps normal! gggqG'
   end)
@@ -235,6 +269,9 @@ local function wrap_paragraph(lines, width, field, scratch, summary_prefix)
   end
   if summary_prefix then
     result = result:sub(#summary_prefix + 1)
+  end
+  if markdown_shape(original) ~= markdown_shape(result) then
+    return vim.split(original, '\n', { plain = true })
   end
   return vim.split(result, '\n', { plain = true })
 end
@@ -261,7 +298,7 @@ local function collect_docstring_ranges(lines)
   end
 
   for row, line in ipairs(lines) do
-    local heading = line:match '^([%a ]+):$'
+    local heading = line:match '^(%a[%a ]*):$'
     local numpy = lines[row + 1] and lines[row + 1]:match '^%-%-%-+$'
     if heading or numpy then
       finish(row - 1)
@@ -279,7 +316,7 @@ local function collect_docstring_ranges(lines)
       end
       if not entry then
         finish(row - 1)
-      elseif not first or #whitespace < indent or (#whitespace == indent and style == 'google' and line:match ':%s') then
+      elseif not first or #whitespace < indent or (#whitespace == indent and style == 'google' and (line:match ':%s' or line:match ':$')) then
         finish(row - 1)
         first, indent = row, #whitespace
       end
@@ -289,12 +326,64 @@ local function collect_docstring_ranges(lines)
   return ranges, structured
 end
 
-local function reflow_prose(lines, width, scratch, block, opts)
+local function collect_disabled_rows(lines)
+  local rows, disabled = {}, false
+  for row, line in ipairs(lines) do
+    local directive = vim.trim(line):gsub('^#%s*', ''):gsub('^//[/!]*%s*', '')
+    directive = directive:gsub('^<!%-%-%s*', ''):gsub('%s*%-%->$', '')
+    local mode = directive:match '^fmt:%s*(%a+)' or directive:match '^reflow:%s*(%a+)'
+
+    if mode == 'off' or directive == 'prettier-ignore-start' then
+      disabled = true
+    end
+    rows[row] = disabled
+    if mode == 'on' or directive == 'prettier-ignore-end' then
+      disabled = false
+    end
+  end
+  return rows
+end
+
+local function collect_protected_rows(lines, root, source)
+  local rows, doctest = {}, false
+  for row, line in ipairs(lines) do
+    if line:match '^%s*$' then
+      doctest = false
+    elseif line:match '^%s*>>>' then
+      doctest = true
+    end
+    rows[row] = doctest
+  end
+
+  local query = vim.treesitter.query.parse('markdown', '(html_block) @directive')
+  for _, node in query:iter_captures(root, source) do
+    if vim.trim(vim.treesitter.get_node_text(node, source)) == '<!-- prettier-ignore -->' then
+      local following = node:next_named_sibling()
+      local parent = node:parent()
+      while not following and parent do
+        following, parent = parent:next_named_sibling(), parent:parent()
+      end
+      if following and following:type() == 'section' then
+        following = following:named_child(0)
+      end
+      if following then
+        local first, _, last, column = following:range()
+        for row = first + 1, last + (column > 0 and 1 or 0) do
+          rows[row] = true
+        end
+      end
+    end
+  end
+  return rows
+end
+
+local function reflow_prose(lines, width, scratch, block, opts, disabled_rows)
   if #lines == 0 then
     return lines
   end
   local source = table.concat(lines, '\n') .. '\n'
   local root = parse(source, 'markdown')
+  local protected_rows = collect_protected_rows(lines, root, source)
   -- Paragraph nodes can include indentation belonging to the next nested list item.
   local query = vim.treesitter.query.parse('markdown', '(paragraph (inline) @paragraph)')
   local ranges, structured = {}, {}
@@ -304,7 +393,8 @@ local function reflow_prose(lines, width, scratch, block, opts)
   for _, node in query:iter_captures(root, source) do
     local first, _, last, column = node:range()
     last = column == 0 and last or last + 1
-    if not structured[first + 1] and not structured[last] then
+    local heading = node:parent():parent():type() == 'setext_heading'
+    if not heading and not structured[first + 1] and not structured[last] then
       local start = first + 1
       for row = start, last + 1 do
         if row > last or not can_reflow(lines, row, row) then
@@ -324,7 +414,11 @@ local function reflow_prose(lines, width, scratch, block, opts)
   for _, range in ipairs(ranges) do
     local first, last = unpack(range)
     local offset = block.first + (block.content_offset or 0)
-    if first + offset >= opts.line1 and last + offset <= opts.line2 and can_reflow(lines, first, last, range.field) then
+    local protected = false
+    for row = first, last do
+      protected = protected or protected_rows[row] or disabled_rows[row + offset]
+    end
+    if not protected and first + offset >= opts.line1 and last + offset <= opts.line2 and can_reflow(lines, first, last, range.field) then
       vim.list_extend(result, vim.list_slice(lines, position, first - 1))
       local summary_prefix = first == 1 and block.summary_prefix or nil
       vim.list_extend(result, wrap_paragraph(vim.list_slice(lines, first, last), width, range.field, scratch, summary_prefix))
@@ -337,6 +431,7 @@ end
 
 local function build_edits(lines, blocks, width, scratch, opts)
   local result = {}
+  local disabled_rows = collect_disabled_rows(lines)
   for _, block in ipairs(blocks) do
     local selected = block.first < opts.line2 and block.last >= opts.line1
     if block.kind then
@@ -346,7 +441,7 @@ local function build_edits(lines, blocks, width, scratch, opts)
       local content, prefix, opening, closing = unpack_block(lines, block)
       local available = prefix and width - vim.fn.strdisplaywidth(prefix) or 0
       if content and available > 0 then
-        local wrapped = reflow_prose(content, available, scratch, block, opts)
+        local wrapped = reflow_prose(content, available, scratch, block, opts, disabled_rows)
         local replacement = opening
         local first_line = 1
         if block.summary_prefix and wrapped[1] then
@@ -382,6 +477,8 @@ function M.reflow(opts)
   local blocks = language == 'markdown' and { { first = 0, last = #lines, prefix = '' } } or collect_blocks(lines, language)
   local scratch = vim.api.nvim_create_buf(false, true)
   vim.bo[scratch].formatoptions = 'tqn'
+  -- The default also accepts a number followed by a space, mistaking years for list items.
+  vim.bo[scratch].formatlistpat = [[^\s*\d\+[.)]\s\+]]
   vim.bo[scratch].comments = 'fb:*,fb:-,fb:+,n:>'
   vim.bo[scratch].formatexpr = ''
   vim.bo[scratch].formatprg = ''

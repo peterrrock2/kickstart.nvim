@@ -15,6 +15,12 @@ line breaks. Links, inline code, and `$...$` math stay intact, even when a unit 
 requested width. Code, ordinary string values, and trailing inline comments are left alone.
 Docstrings keep their existing opening-quote placement, including when a summary needs wrapping.
 
+Use `<!-- reflow: off -->` / `<!-- reflow: on -->` in Markdown, or the same directives in
+Python/Rust line comments, to preserve a region. `fmt: off/on` and Markdown's
+`prettier-ignore` directives are also recognized. Ambiguous syntax and paragraph edits that
+would introduce Markdown blocks are left unchanged. See [reflow edge cases](doc/reflow.md)
+for the handling rules, deliberate limits, and regression checks.
+
 The command uses the configured Tree-sitter parsers and Neovim's native paragraph formatter.
 It runs only on request, separately from Conform's code formatting on save. Missing parsers
 or Python/Rust syntax errors stop the operation before any edits are applied.
