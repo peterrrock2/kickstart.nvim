@@ -1,5 +1,24 @@
 # kickstart.nvim
 
+## Reflowing prose
+
+Use `:Reflow` to wrap prose in the current Rust, Markdown, or Python buffer to 98 columns.
+Pass a different width with `:Reflow 88`. Select complete paragraphs or comment/docstring blocks
+and run `:'<,'>Reflow 88` to limit the operation. A single `u` undoes the command.
+Press **Space, Shift+R** to reflow at 98 columns: the whole buffer in normal mode or the
+selection in visual mode.
+
+Reflow handles standalone comments, triple-quoted Python docstrings (including Google-style
+fields and NumPy-style descriptions), and Markdown paragraphs, lists, and blockquotes.
+It preserves Markdown tables, fenced code, indented code, doctest examples, and explicit hard
+line breaks. Links, inline code, and `$...$` math stay intact, even when a unit exceeds the
+requested width. Code, ordinary string values, and trailing inline comments are left alone.
+Docstrings keep their existing opening-quote placement, including when a summary needs wrapping.
+
+The command uses the configured Tree-sitter parsers and Neovim's native paragraph formatter.
+It runs only on request, separately from Conform's code formatting on save. Missing parsers
+or Python/Rust syntax errors stop the operation before any edits are applied.
+
 ## Introduction
 
 A starting point for Neovim that is:
@@ -238,4 +257,3 @@ sudo dnf install -y gcc make git ripgrep fd-find unzip neovim
 sudo pacman -S --noconfirm --needed gcc make git ripgrep fd unzip neovim
 ```
 </details>
-
