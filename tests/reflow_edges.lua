@@ -168,6 +168,29 @@ check('doctest output without Examples heading', 'python', doctest, function(out
   assert(not vim.deep_equal(output, doctest), 'ordinary prose after the doctest did not reflow')
 end)
 
+for _, heading in ipairs { 'Note:', 'Notes:' } do
+  local code = '            print("' .. prose .. '")'
+  check('prose paragraphs and code in ' .. heading, 'python', docstring {
+    '',
+    heading,
+    '    Keep this in mind: ' .. prose,
+    '',
+    '    ' .. prose,
+    '',
+    code:sub(5),
+  }, function(output)
+    contains(output, '    ' .. heading .. '\n        Keep this in mind: These words')
+    contains(output, '\n\n        These words explain the behavior')
+    contains(output, code)
+    for _, line in ipairs(output) do
+      if line ~= code then
+        assert(vim.fn.strdisplaywidth(line) <= 40, 'note prose did not wrap')
+        assert(not line:match '^            %S', 'note prose acquired field indentation')
+      end
+    end
+  end)
+end
+
 check(
   'field descriptions starting on the next line',
   'python',

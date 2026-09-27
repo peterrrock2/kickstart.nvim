@@ -221,6 +221,40 @@ contains(wrapped, '        list[PublicFileRequest]: Boundaries and reference tab
 vim.cmd 'Reflow'
 assert(vim.deep_equal(wrapped, vim.api.nvim_buf_get_lines(0, 0, -1, false)), 'Docstring quote placement is not idempotent')
 
+local spanning_tree = {
+  'def connect():',
+  '    """Return a copy joined by a minimum-distance spanning tree of the original components.',
+  '',
+  "    Prim's algorithm repeatedly adds the shortest edge leaving the connected component group. Each",
+  '    candidate joins the nearest polygons, using their full shapes rather than centroids. Equal',
+  '    distances are resolved by the sorted pair of geographic IDs. Original edges retain their',
+  '    attributes; added edges have artificial=True and shared_perim=0.',
+  '',
+  '    Note:',
+  "        Other MST algorithms could be used, but Prim's is simple and maps well to the problem of connecting a small number of disconnected components.",
+  '',
+  '    Args:',
+  '        graph (Graph): Geographic adjacency with string geographic node IDs.',
+  '        units_df (gpd.GeoDataFrame): Retained polygons indexed by those IDs, in a metre CRS.',
+  '',
+  '    Returns:',
+  '        Graph: Connected copy with k-1 new edges for k original components. Empty and single-node',
+  '            graphs are unchanged copies. The input graph and polygons are not modified.',
+  '    """',
+}
+wrapped = reflow('python', spanning_tree, 'Reflow')
+within_width(wrapped, 98)
+contains(
+  wrapped,
+  "    Note:\n        Other MST algorithms could be used, but Prim's is simple and maps well to the problem of\n"
+    .. '        connecting a small number of disconnected components.'
+)
+contains(wrapped, spanning_tree[13])
+contains(wrapped, spanning_tree[14])
+contains(wrapped, '    Returns:\n        Graph: Connected copy')
+vim.cmd 'Reflow'
+assert(vim.deep_equal(wrapped, vim.api.nvim_buf_get_lines(0, 0, -1, false)), 'Note reflow is not idempotent')
+
 local numpy = {
   'def work(x):',
   '    """Summary.',

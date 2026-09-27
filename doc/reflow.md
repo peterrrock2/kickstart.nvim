@@ -23,6 +23,7 @@ to choose another width, or **Space, Shift+R** for the default width.
 | Explicit Markdown hard breaks | Preserve lines ending in two spaces or a backslash. |
 | Python docstring opening quotes | Keep the existing placement; an attached summary stays attached. |
 | Google-style fields | Wrap descriptions with hanging indentation, including descriptions that initially start on the next line. |
+| Google-style `Note:` and `Notes:` sections | Wrap prose paragraphs at their existing indentation without field-style hanging indentation. |
 | NumPy-style fields | Preserve declarations and wrap indented descriptions. |
 | Doctest prompts and output | Preserve from `>>>` through the next blank line. |
 | Unsupported docstring structures, such as Sphinx fields | Leave them unchanged rather than guess their indentation rules. |
@@ -69,7 +70,7 @@ NVIM_LOG_FILE=/tmp/nvim-reflow-test.log nvim -n --clean --headless -i NONE -l te
 ```
 
 The original suite includes the reported retrieval-guide and docstring examples. The edge-case
-suite exercises 315 cases, including a width/marker matrix, protected units at widths from 1 to
+suite exercises 317 cases, including a width/marker matrix, protected units at widths from 1 to
 120, double-width ambiguous characters, ignore/resume behavior, selections, undo/redo, and parser
 failure. Each successful formatting case is reflowed again to check stability.
 

@@ -287,12 +287,14 @@ local field_sections = {
   Attributes = true,
 }
 
+local prose_sections = { Note = true, Notes = true }
+
 local function collect_docstring_ranges(lines)
   local ranges, structured = {}, {}
   local section, style, first, indent, section_indent
   local function finish(last)
     if first then
-      ranges[#ranges + 1] = { first, last, field = style == 'google' }
+      ranges[#ranges + 1] = { first, last, field = style == 'google' and field_sections[section] }
       first = nil
     end
   end
@@ -308,7 +310,8 @@ local function collect_docstring_ranges(lines)
     if section then
       structured[row] = true
       local whitespace = line:match '^%s*'
-      local entry = field_sections[section] and #whitespace > 0 and not line:match '^%s*$'
+      local supported = field_sections[section] or (style == 'google' and prose_sections[section])
+      local entry = supported and #whitespace > 0 and not line:match '^%s*$'
       if entry then
         section_indent = section_indent or #whitespace
         -- A separately indented block can be a code example, even inside a field section.
@@ -316,7 +319,11 @@ local function collect_docstring_ranges(lines)
       end
       if not entry then
         finish(row - 1)
-      elseif not first or #whitespace < indent or (#whitespace == indent and style == 'google' and (line:match ':%s' or line:match ':$')) then
+      elseif
+        not first
+        or #whitespace < indent
+        or (#whitespace == indent and style == 'google' and field_sections[section] and (line:match ':%s' or line:match ':$'))
+      then
         finish(row - 1)
         first, indent = row, #whitespace
       end
