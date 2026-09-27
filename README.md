@@ -94,6 +94,31 @@ saves its result and metadata, reopens the file, and creates a new notebook:
 NVIM_LOG_FILE=/tmp/nvim-notebooks.log nvim --headless -n -i NONE -c 'luafile tests/notebooks.lua'
 ```
 
+## CodeCompanion
+
+CodeCompanion chat uses Codex through the [Codex ACP bridge](https://github.com/agentclientprotocol/codex-acp),
+with your ChatGPT login and Codex model settings. To recreate the setup on another machine:
+
+```sh
+npm install -g @openai/codex @agentclientprotocol/codex-acp@1.13.1
+codex login
+```
+
+Run `:Lazy install` in Neovim, then `:checkhealth codecompanion` to check the setup.
+Inline edits and command generation retain CodeCompanion's Copilot default because those
+interactions require an HTTP adapter; the Codex ACP adapter supports chat only.
+
+| Shortcut | Action |
+| --- | --- |
+| `Space a c` | Toggle the chat window |
+| `Space a a` | Open the action palette, also available with a visual selection |
+| `Space a i` | Prompt for an inline edit, using the visual selection when present |
+| `Space a s` | Add the visual selection to chat |
+
+In chat, press `Enter` in normal mode to send your message, `ga` to change the adapter/model,
+or `?` for the available shortcuts. See the [CodeCompanion guide](https://codecompanion.olimorris.dev/usage/chat-buffer/).
+The plugin is pinned to version 19.26.0 in `lua/custom/plugins/codecompanion.lua`.
+
 ## Reflowing prose
 
 Use `:Reflow` to wrap prose in the current Rust, Markdown, or Python buffer to 98 columns.

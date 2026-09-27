@@ -44,6 +44,7 @@ return { -- Useful plugin to show you pending keybinds.
 
     -- Document existing key chains
     spec = {
+      { '<leader>a', group = '[A]I', mode = { 'n', 'x' } },
       { '<leader>j', group = '[J]upyter', mode = { 'n', 'x' } },
       { '<leader>s', group = '[S]earch' },
       { '<leader>t', group = '[T]oggle' },
