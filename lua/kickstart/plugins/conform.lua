@@ -69,6 +69,15 @@ return { -- Autoformat
   opts = {
     notify_on_error = false,
     format_on_save = function(bufnr)
+      if vim.bo[bufnr].filetype == 'bigfile' then
+        return nil
+      end
+
+      -- Notebook code must still match Molten's executed cells when exporting outputs.
+      if vim.api.nvim_buf_get_name(bufnr):match '%.ipynb$' then
+        return nil
+      end
+
       -- Disable "format_on_save lsp_fallback" for languages that don't
       -- have a well standardized coding style. You can add additional
       -- languages here or re-enable it for the disabled ones.

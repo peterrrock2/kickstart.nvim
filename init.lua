@@ -1,20 +1,14 @@
-local venv = os.getenv 'VIRTUAL_ENV'
-if venv and vim.fn.executable(venv .. '/bin/python') == 1 then
-  vim.g.python3_host_prog = venv .. '/bin/python'
-end
+-- Remote plugins need a stable host; project environments belong to LSPs and kernels.
+vim.g.python3_host_prog = vim.fn.stdpath 'data' .. '/python/bin/python'
+
+-- Expand minified JSON before filetype detection can attach parsers or language servers.
+require('custom.json_reformat').setup()
 
 -- Set <space> as the leader key
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
 vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
-
--- Automatically detect .venv in the current project and set it for Python provider
-local venv_path = vim.fn.finddir('.venv', '.;')
-if venv_path ~= '' then
-  local python_bin = vim.fn.getcwd() .. '/' .. venv_path .. '/bin/python'
-  vim.g.python3_host_prog = python_bin
-end
 
 -- Set to true if you have a Nerd Font installed and selected in the terminal
 vim.g.have_nerd_font = true

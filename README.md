@@ -1,5 +1,99 @@
 # kickstart.nvim
 
+## Large files and minified JSON
+
+Opening a `.json` file automatically pretty-prints it with jq when one of its first 20 lines
+is at least 2,000 bytes long. This runs before filetype detection, so smaller files get normal
+JSON highlighting after expansion. The buffer is marked modified; **`:w` saves the new layout**,
+and `u` restores the original layout. Opening a file never writes it to disk.
+
+Snacks uses lightweight `bigfile` mode above 1.5 MiB on disk, or an average line length above
+1,000 bytes. This applies to other ordinary files too. It keeps basic syntax highlighting and
+disables Tree-sitter, LSP attachment, completion, automatic formatting, indent guides, Git hunk
+actions, and the Tree-sitter context window. A large JSON file stays in this mode after expansion.
+These protections also survive session restoration. Big-file windows disable soft wrapping so an
+unformatted, very long line does not make scrolling expensive.
+
+The formatter requires jq 1.7 or newer and verifies that only whitespace **outside strings**
+changed. Duplicate keys, numeric normalization, or changed string escapes cause it to keep the
+original. Malformed JSON and failed/timed-out commands also leave the buffer unchanged.
+`.jsonl`, `.jsonc`, and `.ipynb` are excluded. Comments inside `.json` are rejected by jq.
+
+Automatic formatting stops at 50 MiB and allows jq up to three seconds. To adjust these limits,
+edit the early `require('custom.json_reformat').setup()` call in `init.lua`, for example:
+
+```lua
+require('custom.json_reformat').setup {
+  min_line_length = 2000,
+  sample_lines = 20,
+  max_bytes = 50 * 1024 * 1024,
+  timeout_ms = 3000,
+}
+```
+
+For files too large to edit comfortably, `jless file.json` is an optional external viewer;
+it is not installed by this configuration. `jq -c .` compacts JSON but does not restore original
+bytes, duplicate keys, or previous numeric/string representations.
+
+Regression checks:
+
+```sh
+NVIM_LOG_FILE=/tmp/nvim-json-test.log nvim --clean --headless -n -i NONE -l tests/json_reformat.lua
+NVIM_LOG_FILE=/tmp/nvim-bigfiles-test.log nvim --headless -n -i NONE -c 'luafile tests/bigfiles.lua'
+```
+
+## Jupyter notebooks
+
+Open an existing or new `.ipynb` file normally. Jupytext displays it as Markdown with fenced
+code cells and writes notebook JSON when you save. Molten executes the cells, and Quarto/Otter
+provide cell selection and language support. Nothing executes just from opening a notebook.
+
+| Shortcut | Action |
+| --- | --- |
+| `Space j i` | Choose and start a kernel |
+| `Space j I` | Import the notebook's saved outputs after starting a kernel |
+| `Space j c` | Run the code cell under the cursor |
+| `Space j a` / `Space j A` | Run through the current cell / all cells |
+| `Space j e` | Run a motion; in visual mode, run the selection |
+| `Space j r` | Rerun the current Molten cell |
+| `Space j o` / `Space j h` | Enter / hide the output window |
+| `Space j w` | Save the notebook and export executed outputs |
+| `Space j x` / `Space j q` | Interrupt / stop the buffer's kernel |
+
+Use whole-cell execution when saving notebook outputs. Plain `:w` saves your source and retains
+outputs for unchanged cells; `Space j w` also exports the current Molten results. The output
+shortcuts require exactly one kernel attached to the notebook. Molten matches outputs by cell
+code, so execute all duplicate code cells before exporting results. See its
+[output matching rules](https://github.com/benlubas/molten-nvim/blob/v1.9.2/docs/Advanced-Functionality.md#cell-matching).
+
+Neovim's Python host lives in `~/.local/share/nvim/python`, independently of project environments.
+To recreate it on another machine:
+
+```sh
+uv venv ~/.local/share/nvim/python
+uv pip install --python ~/.local/share/nvim/python/bin/python pynvim jupyter-client jupytext nbformat ipykernel
+```
+
+Install the plugins with `:Lazy install`, then run `:UpdateRemotePlugins` and restart Neovim.
+For a project's packages, register its Python environment as a kernel and select that kernel:
+
+```sh
+uv pip install --python .venv/bin/python ipykernel
+.venv/bin/python -m ipykernel install --user --name my-project --display-name 'Python (my-project)'
+```
+
+The basic `python3` kernel is available for a smoke test. Plots use the existing image.nvim/Kitty
+setup; plot libraries belong in the selected kernel's environment. `:checkhealth molten jupytext`
+checks dependencies. Git hunk actions and automatic formatting are disabled for converted notebook
+buffers. Notebook writes finish synchronously before outputs are exported.
+
+The integration check opens a temporary notebook, imports an output, edits and executes a cell,
+saves its result and metadata, reopens the file, and creates a new notebook:
+
+```sh
+NVIM_LOG_FILE=/tmp/nvim-notebooks.log nvim --headless -n -i NONE -c 'luafile tests/notebooks.lua'
+```
+
 ## Reflowing prose
 
 Use `:Reflow` to wrap prose in the current Rust, Markdown, or Python buffer to 98 columns.

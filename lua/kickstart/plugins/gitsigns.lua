@@ -7,6 +7,15 @@ return {
     'lewis6991/gitsigns.nvim',
     opts = {
       on_attach = function(bufnr)
+        if vim.bo[bufnr].filetype == 'bigfile' then
+          return false
+        end
+
+        -- Jupytext buffers contain Markdown, while Git stores notebook JSON.
+        if vim.api.nvim_buf_get_name(bufnr):match '%.ipynb$' then
+          return false
+        end
+
         local gitsigns = require 'gitsigns'
 
         local function map(mode, l, r, opts)
