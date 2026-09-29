@@ -105,19 +105,69 @@ codex login
 ```
 
 Run `:Lazy install` in Neovim, then `:checkhealth codecompanion` to check the setup.
-Inline edits and command generation retain CodeCompanion's Copilot default because those
-interactions require an HTTP adapter; the Codex ACP adapter supports chat only.
+Inline prompts (including action-palette prompts and `/tests`) and `:CodeCompanionCmd` route
+through Codex chat because the ACP adapter cannot use the native inline or command UI.
+Command suggestions appear in chat for you to copy and run. HTTP-only background chat requests
+remain disabled. `:CodeCompanionCLI` also defaults to Codex.
 
 | Shortcut | Action |
 | --- | --- |
 | `Space a c` | Toggle the chat window |
 | `Space a a` | Open the action palette, also available with a visual selection |
-| `Space a i` | Prompt for an inline edit, using the visual selection when present |
+| `Space a i` | Ask Codex in chat for an edit, using the visual selection when present |
 | `Space a s` | Add the visual selection to chat |
 
 In chat, press `Enter` in normal mode to send your message, `ga` to change the adapter/model,
-or `?` for the available shortcuts. See the [CodeCompanion guide](https://codecompanion.olimorris.dev/usage/chat-buffer/).
+or `?` for the available shortcuts. `Ctrl-C` hides the chat without deleting it; use **Space a c**
+to reopen it. See the [CodeCompanion guide](https://codecompanion.olimorris.dev/usage/chat-buffer/).
 The plugin is pinned to version 19.26.0 in `lua/custom/plugins/codecompanion.lua`.
+
+## Math in Python docstrings and Rust doc comments
+
+Python docstrings and Rust doc comments can preview `$...$` and `$$...$$` math using
+render-markdown's Unicode virtual text and lines. Rendering is off by default; **Space m p** toggles
+it for the current buffer. Source text is unchanged, and the formula under the cursor is shown
+as source for editing.
+Ordinary strings, assigned strings, and executable code are excluded.
+
+```python
+def ratio():
+    r"""Compute the ratio $\alpha / \beta$.
+
+    $$
+    \frac{\alpha}{\beta + x}
+    $$
+    """
+```
+
+Use raw docstrings (`r"""..."""`) to preserve LaTeX backslashes. The configuration installs the
+LaTeX Tree-sitter parser automatically. Rendering also needs
+[`utftex` from libtexprintf](https://github.com/bartp5/libtexprintf), installed here at
+`~/.local/bin/utftex`. It renders math with terminal characters and requires no TeX distribution.
+Markdown files retain their existing manual preview toggle.
+
+Rust supports `///`, `//!`, `/** ... */`, and `/*! ... */` doc comments. Keep each formula on
+one line in `///` and `//!` comments. For formulas spanning multiple lines, use a block doc
+comment without leading `*` decorations:
+
+```rust
+/// Compute the ratio $\alpha / \beta$.
+/// $$\frac{\alpha}{\beta + x}$$
+fn ratio() {}
+
+/**
+$$
+\frac{\alpha}{\beta + x}
+$$
+*/
+fn another_ratio() {}
+```
+
+Regression check:
+
+```sh
+NVIM_LOG_FILE=/tmp/nvim-math-test.log nvim -n --clean --headless -i NONE -l tests/docstring_math.lua
+```
 
 ## Reflowing prose
 

@@ -7,6 +7,7 @@ local parsers = {
   'javascript',
   'json',
   'julia',
+  'latex',
   'lua',
   'luadoc',
   'markdown',
