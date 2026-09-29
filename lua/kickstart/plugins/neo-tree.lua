@@ -104,7 +104,8 @@ return {
         mappings = {
           ['\\'] = 'close_window',
           -- Floating previews replace image.nvim's buffer with a scratch buffer.
-          ['P'] = { 'toggle_preview', config = { use_float = false } },
+          -- Snacks' non-floating image preview clears the text buffer it temporarily replaces.
+          ['P'] = { 'toggle_preview', config = { use_float = false, use_snacks_image = false } },
           ['Y'] = function(state)
             local node = state.tree:get_node()
             local path = node:get_id()

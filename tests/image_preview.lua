@@ -579,8 +579,31 @@ press('l')
 press('0')
 assert(image.path == vector_pdf, 'Vector PDF reset failed')
 
-for _, name in ipairs({ 'neo-tree.nvim', 'nui.nvim', 'plenary.nvim', 'nvim-web-devicons' }) do
+for _, name in ipairs({ 'neo-tree.nvim', 'nui.nvim', 'plenary.nvim', 'nvim-web-devicons', 'snacks.nvim' }) do
   vim.opt.runtimepath:append(vim.fn.stdpath('data') .. '/lazy/' .. name)
+end
+require('snacks').setup({ image = { enabled = false } })
+local snacks_image = require('snacks.image')
+snacks_image.supports_terminal = function()
+  return true
+end
+-- Keep conversion pending so Snacks exercises its real buffer-clearing loading indicator.
+local placement_id = 0
+snacks_image.image.new = function()
+  return {
+    place = function(_, placement)
+      placement_id = placement_id + 1
+      placement.id = placement_id
+    end,
+    ready = function()
+      return false
+    end,
+    failed = function()
+      return false
+    end,
+    del = function() end,
+    _convert = { current = function() return { name = 'pending conversion' } end },
+  }
 end
 local tree_options = dofile(vim.fn.stdpath('config') .. '/lua/kickstart/plugins/neo-tree.lua').opts
 tree_options.log_to_file = false
@@ -593,6 +616,24 @@ api.setup({
 })
 vim.cmd('enew')
 local original_buffer = vim.api.nvim_get_current_buf()
+local text_path = vim.fn.tempname() .. '.txt'
+local expected_text = { 'Previously saved work', 'Unsaved edits' }
+vim.api.nvim_buf_set_name(original_buffer, text_path)
+vim.api.nvim_buf_set_lines(original_buffer, 0, -1, false, { expected_text[1] })
+vim.cmd.write()
+vim.api.nvim_buf_set_lines(original_buffer, 0, -1, false, expected_text)
+
+local function check_preview_preserves_text()
+  -- Save with the preview open, as the Alt+Shift+Q mapping does before quitting.
+  vim.cmd.wall()
+  assert(vim.deep_equal(vim.fn.readfile(text_path), expected_text), 'Preview erased saved text')
+  assert(
+    vim.deep_equal(vim.api.nvim_buf_get_lines(original_buffer, 0, -1, false), expected_text),
+    'Preview erased the text buffer'
+  )
+  assert(vim.deep_equal(vim.fn.readfile(source, 'b'), original), 'Preview changed the source image')
+end
+
 vim.cmd('vsplit')
 local tree_window = vim.api.nvim_get_current_win()
 local preview = require('neo-tree.sources.common.preview'):new({
@@ -602,6 +643,7 @@ local preview = require('neo-tree.sources.common.preview'):new({
 })
 local source_buffer = vim.fn.bufadd(source)
 preview:preview(source_buffer)
+check_preview_preserves_text()
 assert(
   vim.api.nvim_win_get_buf(preview.winid) == source_buffer,
   'Neo-tree replaced the image buffer with an empty preview buffer'
@@ -611,9 +653,11 @@ settle(image)
 assert(vim.api.nvim_get_current_win() == tree_window, 'Preview stole focus from the tree')
 local second_source = vim.fn.tempname() .. '.png'
 assert(vim.system({ 'magick', '-size', '320x240', 'xc:purple', second_source }):wait().code == 0)
+local second_original = vim.fn.readfile(second_source, 'b')
 local second_buffer = vim.fn.bufadd(second_source)
 for _, buffer in ipairs({ second_buffer, source_buffer, second_buffer }) do
   preview:preview(buffer)
+  check_preview_preserves_text()
   image = assert(api.get_images({ window = preview.winid, buffer = buffer })[1])
   settle(image)
   vim.wait(100)
@@ -625,10 +669,12 @@ for _, buffer in ipairs({ second_buffer, source_buffer, second_buffer }) do
 end
 local preview_window = preview.winid
 preview:revert()
+check_preview_preserves_text()
+assert(vim.deep_equal(vim.fn.readfile(second_source, 'b'), second_original), 'Preview changed the second image')
 assert(
   vim.api.nvim_win_get_buf(preview_window) == original_buffer,
   'Preview did not restore the buffer'
 )
 print(
-  'PASS: preview controls, continuous PDFs, Kitty uploads, Neo-tree preview, and PDF vector detail'
+  'PASS: preview controls, continuous PDFs, Kitty uploads, Neo-tree text preservation, and PDF vector detail'
 )
