@@ -40,6 +40,12 @@ local function same_tokens(original, formatted)
   end
 end
 
+local function confirm_lossy_format()
+  local message = 'jq would change JSON tokens (number spelling, string escapes, duplicate keys).\n'
+    .. 'Format anyway? The buffer becomes readonly, so saving the rewritten JSON takes :w!'
+  return vim.fn.confirm(message, '&Format anyway\n&Leave unchanged', 2, 'Warning') == 1
+end
+
 local function reformat(buffer, opts)
   local bo = vim.bo[buffer]
   if bo.buftype ~= '' or bo.readonly or not bo.modifiable or bo.modified then
@@ -73,8 +79,9 @@ local function reformat(buffer, opts)
   end
 
   -- Identity filters can still discard duplicate keys or normalize numbers and string escapes.
-  if not same_tokens(source, result.stdout) then
-    return 'jq would change JSON tokens; the original buffer is unchanged'
+  local lossy = not same_tokens(source, result.stdout)
+  if lossy and not confirm_lossy_format() then
+    return
   end
 
   local formatted = result.stdout:gsub('\n$', '')
@@ -82,14 +89,17 @@ local function reformat(buffer, opts)
     vim.api.nvim_buf_set_lines(buffer, 0, -1, false, vim.split(formatted, '\n', { plain = true }))
     bo.modified = true
   end
+
+  -- Writing jq's rewritten values to disk then takes an explicit :w!
+  bo.readonly = lossy
 end
 
 function M.setup(opts)
   opts = vim.tbl_extend('force', {
     min_line_length = 2000,
     sample_lines = 20,
-    max_bytes = 50 * 1024 * 1024,
-    timeout_ms = 3000,
+    max_bytes = 256 * 1024 * 1024,
+    timeout_ms = 10000,
   }, opts or {})
 
   vim.api.nvim_create_autocmd('BufReadPost', {

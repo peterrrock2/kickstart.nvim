@@ -88,6 +88,19 @@ end
 unchanged('missing-jq.json', source)
 vim.system = system
 
+local confirm = vim.fn.confirm
+vim.fn.confirm = function()
+  return 1
+end
+output, path = open('exponent.json', '{"number":1e-05,' .. payload .. '}')
+assert(output:find('\n', 1, true), 'confirmed lossy format did not expand the buffer')
+assert(vim.bo.readonly, 'lossy format must require :w! to save')
+assert(not pcall(vim.cmd.write), 'plain :w saved a lossy format')
+assert(vim.fn.readfile(path)[1]:find('1e-05', 1, true), 'lossy format reached disk without :w!')
+vim.cmd 'write!'
+assert(vim.fn.readfile(path)[2]:find('0.00001', 1, true), ':w! did not save the lossy format')
+vim.fn.confirm = confirm
+
 vim.cmd 'bwipeout!'
 vim.fn.delete(directory, 'rf')
 print 'PASS: JSON preservation, failures, undo, exclusions, and bigfile detection after formatting'
