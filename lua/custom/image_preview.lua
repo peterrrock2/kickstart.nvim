@@ -1,6 +1,8 @@
 local M = {}
 local cache = require('custom.image_preview_cache')
 local views = setmetatable({}, { __mode = 'k' })
+-- Zoom carried to the next image shown in a window, so stepping through Neo-tree previews keeps it.
+local window_zooms = {}
 local tiles = require('custom.image_preview_tiles')
 local pdf = require('custom.image_preview_pdf')
 local change_view
@@ -130,8 +132,20 @@ local function install_tile_renderer()
     end
 
     if not view or not view.resetting then
-      local result = render(image, ...)
-      if not view and image.is_rendered and image.source_format == 'pdf' and image.window then
+      local zoom = image.window and window_zooms[image.window]
+      -- Draw nothing until the remembered zoom is ready rather than flashing the fitted image.
+      local deferred = zoom
+        and not image.is_rendered
+        and image.buffer
+        and vim.bo[image.buffer].filetype == 'image_nvim'
+      local result
+      if deferred then
+        -- Untransformed images enter the registry only when the backend draws them.
+        backend.state.images[image.id] = image
+      else
+        result = render(image, ...)
+      end
+      if not view and (deferred or (image.is_rendered and image.source_format == 'pdf')) then
         vim.schedule(function()
           if
             not views[image]
@@ -139,7 +153,7 @@ local function install_tile_renderer()
             and vim.bo[image.buffer].filetype == 'image_nvim'
           then
             vim.api.nvim_win_call(image.window, function()
-              change_view({ refresh = true })
+              change_view(zoom and { zoom = zoom } or { refresh = true })
             end)
           end
         end)
@@ -214,6 +228,7 @@ change_view = function(action)
     cache.cancel(view)
     view.resetting = true
     view.zoom, view.x, view.y = 1, 0, 0
+    window_zooms[window] = nil
     replace_source(image, view.source, view.format, view.width, view.height)
     image.geometry = vim.deepcopy(view.geometry)
     image.ignore_global_max_size, image.render_offset_top = view.ignore_max, view.offset
@@ -276,6 +291,7 @@ change_view = function(action)
   end
   local columns, rows = math.ceil(width / term.cell_width), math.ceil(height / term.cell_height)
   view.zoom, view.x, view.y = zoom, x / scale, y / scale
+  window_zooms[window] = math.abs(zoom - 1) > 1e-9 and zoom or nil
   view.page = view.document and pdf.page_at(view.document, (y + height / 2) / scale) or nil
   cache.get(view, {
     width = width,
@@ -317,6 +333,9 @@ function M.setup()
   vim.api.nvim_create_autocmd({ 'WinClosed', 'BufWipeout', 'VimLeavePre' }, {
     group = group,
     callback = function(event)
+      if event.event == 'WinClosed' then
+        window_zooms[tonumber(event.match)] = nil
+      end
       for image, view in pairs(views) do
         if
           event.event == 'VimLeavePre'

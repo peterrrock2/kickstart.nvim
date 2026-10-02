@@ -423,6 +423,15 @@ end
 vim.cmd.buffer(old_buffer)
 image = assert(api.hijack_buffer(source))
 settle(image)
+-- The window's zoom is reapplied on return, rebuilding tiles from the original source.
+assert(
+  vim.wait(10000, function()
+    return current_view and current_view.source == source and current_view.zoom == 1.25
+  end, 10),
+  'Returning to a preview did not restore its zoom'
+)
+settle(image)
+press('0')
 assert(image.path == source, 'Returning to a preview used a deleted tile as its source')
 local parent_id = image.internal_id
 assert(transmitted[parent_id], 'Original preview did not upload')
@@ -667,6 +676,31 @@ for _, buffer in ipairs({ second_buffer, source_buffer, second_buffer }) do
   )
   assert(vim.api.nvim_get_current_win() == tree_window, 'Switching previews stole focus')
 end
+-- Zoom set in the preview window carries to the next previewed image.
+vim.api.nvim_win_call(preview.winid, function()
+  image = assert(api.get_images({ window = preview.winid, buffer = second_buffer })[1])
+  press('+')
+end)
+local zoomed_preview_start = #graphics + 1
+preview:preview(source_buffer)
+image = assert(api.get_images({ window = preview.winid, buffer = source_buffer })[1])
+assert(
+  vim.wait(10000, function()
+    return current_view and current_view.source == source and current_view.zoom == 1.25
+  end, 10),
+  'Previewing the next image lost the zoom level'
+)
+settle(image)
+for index = zoomed_preview_start, #graphics do
+  local command = graphics[index]
+  assert(
+    command.action ~= 'p' or command.image_id ~= image.internal_id,
+    'Zoomed preview flashed the fitted image first'
+  )
+end
+vim.api.nvim_win_call(preview.winid, function()
+  press('0')
+end)
 local preview_window = preview.winid
 preview:revert()
 check_preview_preserves_text()
@@ -675,6 +709,31 @@ assert(
   vim.api.nvim_win_get_buf(preview_window) == original_buffer,
   'Preview did not restore the buffer'
 )
+
+-- Direct opens do not get Neo-tree's early render to register an untransformed image.
+api.setup({ processor = 'magick_cli', integrations = integrations, hijack_file_patterns = {} })
+for index, color in ipairs({ 'red', 'blue' }) do
+  local small_source = vim.fn.tempname() .. '.png'
+  assert(vim.system({ 'magick', '-size', '80x64', 'xc:' .. color, small_source }):wait().code == 0)
+  vim.cmd.enew()
+  vim.api.nvim_buf_set_name(0, small_source)
+  image = assert(api.hijack_buffer(small_source))
+  if index == 2 then
+    assert(image.resize_hash == nil, 'The fresh PNG unexpectedly needed a transform')
+    assert(
+      api.get_images({ window = image.window, buffer = image.buffer })[1] == image,
+      'Opening an untransformed PNG with remembered zoom left it unregistered'
+    )
+  end
+  settle(image)
+  if index == 1 then
+    vim.cmd.normal({ '+' })
+    settle(image)
+  else
+    assert(current_view.source == small_source and current_view.zoom == 1.25)
+    check_tiles()
+  end
+end
 print(
   'PASS: preview controls, continuous PDFs, Kitty uploads, Neo-tree text preservation, and PDF vector detail'
 )

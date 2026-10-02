@@ -23,6 +23,26 @@ local function restore_python_folding()
   end
 end
 
+local function restore_session_root_directory()
+  local directory = vim.fn.getcwd(-1, -1)
+  -- Clear saved local directories without triggering another session save or restore.
+  for _, window in ipairs(vim.api.nvim_list_wins()) do
+    vim.api.nvim_win_call(window, function()
+      vim.cmd.cd { directory, mods = { noautocmd = true } }
+    end)
+  end
+
+  if not package.loaded['neo-tree'] then
+    return
+  end
+
+  local manager = require('neo-tree.sources.manager')
+  for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+    local state = manager.get_state('filesystem', tab)
+    state.path, state.dirty = directory, true
+  end
+end
+
 return {
   'rmagatti/auto-session',
   lazy = false,
@@ -48,7 +68,7 @@ return {
         vim.g.BufferlinePositions = nil
       end,
     },
-    post_restore_cmds = { prune_missing_buffers, restore_python_folding },
+    post_restore_cmds = { prune_missing_buffers, restore_python_folding, restore_session_root_directory },
 
     -- Show restore errors but keep auto-save enabled, so a stale session entry
     -- (e.g. a deleted file image.nvim chokes on) gets overwritten on exit

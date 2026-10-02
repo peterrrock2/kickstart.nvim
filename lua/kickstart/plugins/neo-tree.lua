@@ -73,9 +73,19 @@ return {
   },
   lazy = false,
   keys = {
-    { '\\', ':Neotree reveal<CR>', desc = 'NeoTree reveal', silent = true },
+    {
+      '\\',
+      function()
+        require('neo-tree.command').execute { reveal = true, dir = vim.fn.getcwd() }
+      end,
+      desc = 'NeoTree reveal',
+      silent = true,
+    },
   },
   opts = {
+    window = {
+      mappings = { ['\\'] = 'close_window' },
+    },
     -- By default neo-tree refuses to open files into a terminal window and
     -- falls back to vsplit. Remove "terminal" from the list so it will open
     -- normally into whatever window was last focused (even if it was a terminal).
@@ -102,7 +112,6 @@ return {
     filesystem = {
       window = {
         mappings = {
-          ['\\'] = 'close_window',
           -- Floating previews replace image.nvim's buffer with a scratch buffer.
           -- Snacks' non-floating image preview clears the text buffer it temporarily replaces.
           ['P'] = { 'toggle_preview', config = { use_float = false, use_snacks_image = false } },
