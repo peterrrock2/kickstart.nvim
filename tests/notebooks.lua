@@ -1,6 +1,17 @@
 -- Run: NVIM_LOG_FILE=/tmp/nvim-notebooks.log nvim --headless -n -i NONE -c 'luafile tests/notebooks.lua'
 local directory = vim.fn.tempname() .. ' notebooks'
 vim.fn.mkdir(directory, 'p')
+local environment = directory .. '/.venv'
+vim.fn.mkdir(environment .. '/bin', 'p')
+vim.fn.writefile({ '#!/bin/sh', 'exec ' .. vim.fn.shellescape(vim.g.python3_host_prog) .. ' "$@"' }, environment .. '/bin/python')
+vim.fn.setfperm(environment .. '/bin/python', 'rwx------')
+vim.fn.mkdir(environment .. '/share/jupyter/kernels/python3', 'p')
+local spec = {
+  argv = { 'python', '-m', 'ipykernel_launcher', '-f', '{connection_file}' },
+  display_name = 'Notebook test',
+  language = 'python',
+}
+vim.fn.writefile({ vim.json.encode(spec) }, environment .. '/share/jupyter/kernels/python3/kernel.json')
 local path = directory .. '/round trip.ipynb'
 local original = {
   nbformat = 4,
@@ -52,7 +63,14 @@ local function check_notebook()
       ready = true
     end,
   })
-  vim.cmd 'MoltenInit python3'
+  local kernel_name
+  for _, name in ipairs(vim.fn.MoltenAvailableKernels()) do
+    if vim.endswith(name, vim.fn.sha256(environment):sub(1, 12)) then
+      kernel_name = name
+    end
+  end
+  assert(kernel_name, 'notebook-local environment was not discovered by Molten')
+  vim.cmd('MoltenInit ' .. kernel_name)
   assert(
     vim.wait(15000, function()
       return ready

@@ -138,6 +138,22 @@ return {
     },
 
     event_handlers = {
+      {
+        event = 'neo_tree_preview_before_render',
+        handler = function(args)
+          if args.preview.active then
+            return
+          end
+
+          local window, buffer = args.preview.winid, args.bufnr
+          -- Neo-tree suppresses buffer-entry events while restoring a preview's original buffer.
+          vim.schedule(function()
+            if vim.api.nvim_win_is_valid(window) and vim.api.nvim_win_get_buf(window) == buffer then
+              require('custom.source_window').restore(window)
+            end
+          end)
+        end,
+      },
       -- Capture the current layout just before the tree window appears.
       {
         event = 'neo_tree_window_before_open',

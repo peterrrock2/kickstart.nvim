@@ -57,8 +57,12 @@ provide cell selection and language support. Nothing executes just from opening 
 | `Space j e` | Run a motion; in visual mode, run the selection |
 | `Space j r` | Rerun the current Molten cell |
 | `Space j o` / `Space j h` | Enter / hide the output window |
+| `Space j z` | Open a visible plot in a zoomable image preview |
 | `Space j w` | Save the notebook and export executed outputs |
 | `Space j x` / `Space j q` | Interrupt / stop the buffer's kernel |
+
+In the plot preview, use `+` / `-` to zoom, `h/j/k/l` to pan, `0` to reset, and `q` to close.
+If several Molten plots are visible, `Space j z` prompts you to choose one.
 
 Use whole-cell execution when saving notebook outputs. Plain `:w` saves your source and retains
 outputs for unchanged cells; `Space j w` also exports the current Molten results. The output
@@ -75,12 +79,17 @@ uv pip install --python ~/.local/share/nvim/python/bin/python pynvim jupyter-cli
 ```
 
 Install the plugins with `:Lazy install`, then run `:UpdateRemotePlugins` and restart Neovim.
-For a project's packages, register its Python environment as a kernel and select that kernel:
+Molten discovers the nearest `.venv` or `venv` above the current buffer, plus environments in
+`VIRTUAL_ENV` and `CONDA_PREFIX`. Each must contain `ipykernel`:
 
 ```sh
 uv pip install --python .venv/bin/python ipykernel
-.venv/bin/python -m ipykernel install --user --name my-project --display-name 'Python (my-project)'
 ```
+
+Use `Space j i` or `:MoltenInit` and select `venv-<project>-<hash>`. Environment kernels are
+exposed through temporary, session-local specs with an absolute Python path, so projects named
+`.venv` do not collide or launch Neovim's Python by mistake. Environments discovered while visiting
+other buffers remain available for the session. Existing registered kernels are also available.
 
 The basic `python3` kernel is available for a smoke test. Plots use the existing image.nvim/Kitty
 setup; plot libraries belong in the selected kernel's environment. `:checkhealth molten jupytext`
@@ -92,6 +101,7 @@ saves its result and metadata, reopens the file, and creates a new notebook:
 
 ```sh
 NVIM_LOG_FILE=/tmp/nvim-notebooks.log nvim --headless -n -i NONE -c 'luafile tests/notebooks.lua'
+NVIM_LOG_FILE=/tmp/nvim-molten-kernels.log nvim --clean --headless -n -i NONE -l tests/molten_kernels.lua
 ```
 
 ## CodeCompanion

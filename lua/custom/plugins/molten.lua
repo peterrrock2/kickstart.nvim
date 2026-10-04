@@ -24,6 +24,50 @@ local function notebook_outputs(command)
   end
 end
 
+local function preview_plot()
+  local image_api = require 'image'
+  local images = {}
+  for _, image in ipairs(image_api.get_images { buffer = vim.api.nvim_get_current_buf() }) do
+    if image.id:sub(1, 5) == 'virt-' and image.is_rendered then
+      images[#images + 1] = image
+    end
+  end
+  table.sort(images, function(left, right)
+    return left.geometry.y < right.geometry.y
+  end)
+
+  local function open_image(image)
+    if not image then
+      return
+    end
+
+    local path = image.original_path
+    if vim.fn.filereadable(path) ~= 1 then
+      vim.notify('Molten plot is no longer available', vim.log.levels.WARN)
+      return
+    end
+
+    vim.cmd.vsplit(vim.fn.fnameescape(path))
+    if vim.bo.filetype ~= 'image_nvim' then
+      image_api.hijack_buffer(path)
+    end
+    vim.keymap.set('n', 'q', '<cmd>close<CR>', { buffer = true, desc = 'Close plot preview' })
+  end
+
+  if #images == 0 then
+    vim.notify('No visible Molten plot in this buffer', vim.log.levels.INFO)
+  elseif #images == 1 then
+    open_image(images[1])
+  else
+    vim.ui.select(images, {
+      prompt = 'Choose a Molten plot to zoom:',
+      format_item = function(image)
+        return 'Plot after line ' .. (image.geometry.y + 1)
+      end,
+    }, open_image)
+  end
+end
+
 return {
   'benlubas/molten-nvim',
   version = '^1.0.0',
@@ -31,6 +75,7 @@ return {
   build = ':UpdateRemotePlugins',
   dependencies = { '3rd/image.nvim' },
   init = function()
+    require('custom.molten_kernels').setup()
     vim.g.molten_image_provider = 'image.nvim'
     vim.g.molten_output_win_max_height = 12
     vim.g.molten_virt_text_output = true
@@ -58,6 +103,7 @@ return {
     { '<leader>jr', '<cmd>MoltenReevaluateCell<CR>', desc = 'Jupyter: rerun cell' },
     { '<leader>jo', '<cmd>noautocmd MoltenEnterOutput<CR>', desc = 'Jupyter: enter output' },
     { '<leader>jh', '<cmd>MoltenHideOutput<CR>', desc = 'Jupyter: hide output' },
+    { '<leader>jz', preview_plot, desc = 'Jupyter: zoom plot' },
     { '<leader>jx', '<cmd>MoltenInterrupt<CR>', desc = 'Jupyter: interrupt kernel' },
     { '<leader>jd', '<cmd>MoltenDelete<CR>', desc = 'Jupyter: delete cell output' },
     { '<leader>jq', '<cmd>MoltenDeinit<CR>', desc = 'Jupyter: stop kernel for buffer' },
