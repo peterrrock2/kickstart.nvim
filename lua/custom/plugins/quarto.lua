@@ -4,7 +4,7 @@ return {
   dependencies = { 'jmbuhr/otter.nvim', 'nvim-treesitter/nvim-treesitter' },
   opts = {
     lspFeatures = { languages = { 'python', 'julia', 'r', 'rust' }, chunks = 'all' },
-    codeRunner = { enabled = true, default_method = 'molten' },
+    codeRunner = { enabled = true, default_method = require('custom.quarto_molten').run },
   },
   config = function(_, opts)
     require('quarto').setup(opts)
