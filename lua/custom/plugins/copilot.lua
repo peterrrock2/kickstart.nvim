@@ -16,6 +16,7 @@ return {
         },
       },
       filetypes = {
+        bigfile = false,
         yaml = true,
         markdown = true,
       },
