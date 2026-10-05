@@ -28,7 +28,7 @@ local function preview_plot()
   local image_api = require 'image'
   local images = {}
   for _, image in ipairs(image_api.get_images { buffer = vim.api.nvim_get_current_buf() }) do
-    if image.id:sub(1, 5) == 'virt-' and image.is_rendered then
+    if image.id:sub(1, 5) == 'virt-' then
       images[#images + 1] = image
     end
   end
@@ -55,7 +55,7 @@ local function preview_plot()
   end
 
   if #images == 0 then
-    vim.notify('No visible Molten plot in this buffer', vim.log.levels.INFO)
+    vim.notify('No Molten plot available in this buffer; run a plotting cell first', vim.log.levels.INFO)
   elseif #images == 1 then
     open_image(images[1])
   else

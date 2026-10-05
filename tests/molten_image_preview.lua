@@ -37,12 +37,11 @@ preview()
 assert(#vim.api.nvim_list_wins() == 1 and #notices == 1, 'empty output opened a preview')
 
 images = {
-  { id = 'virt-first', is_rendered = true, original_path = first_path, geometry = { y = 3 } },
+  { id = 'virt-first', is_rendered = false, original_path = first_path, geometry = { y = 3 } },
   { id = 'markdown', is_rendered = true, original_path = second_path, geometry = { y = 4 } },
-  { id = 'virt-old', is_rendered = false, original_path = second_path, geometry = { y = 5 } },
 }
 preview()
-assert(opened[1] == first_path, 'preview selected a hidden or non-Molten image')
+assert(opened[1] == first_path, 'preview did not open an offscreen Molten plot')
 local close = vim.fn.maparg('q', 'n', false, true)
 assert(close.buffer == 1 and close.rhs == '<cmd>close<CR>', 'preview has no close shortcut')
 vim.cmd.close()
@@ -66,4 +65,4 @@ preview()
 assert(opened[2] == second_path, 'chosen plot did not open')
 vim.cmd.close()
 vim.fn.delete(directory, 'rf')
-print 'PASS: Molten plot selection, separate image preview, cancellation, and notebook preservation'
+print 'PASS: offscreen Molten plots, plot selection, separate preview, cancellation, and notebook preservation'

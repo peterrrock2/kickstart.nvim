@@ -57,12 +57,13 @@ provide cell selection and language support. Nothing executes just from opening 
 | `Space j e` | Run a motion; in visual mode, run the selection |
 | `Space j r` | Rerun the current Molten cell |
 | `Space j o` / `Space j h` | Enter / hide the output window |
-| `Space j z` | Open a visible plot in a zoomable image preview |
+| `Space j z` | Open an executed plot in a zoomable image preview |
 | `Space j w` | Save the notebook and export executed outputs |
 | `Space j x` / `Space j q` | Interrupt / stop the buffer's kernel |
 
 In the plot preview, use `+` / `-` to zoom, `h/j/k/l` to pan, `0` to reset, and `q` to close.
-If several Molten plots are visible, `Space j z` prompts you to choose one.
+Plots remain available after scrolling them out of view. If the buffer has several Molten plots,
+`Space j z` prompts you to choose one.
 
 Use whole-cell execution when saving notebook outputs. Plain `:w` saves your source and retains
 outputs for unchanged cells; `Space j w` also exports the current Molten results. The output
